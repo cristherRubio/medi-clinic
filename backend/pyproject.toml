@@ -1,0 +1,39 @@
+[project]
+name = "medi-clinic-backend"
+version = "0.1.0"
+description = "Backend de medi-clinic: agenda B2B para clínicas con recordatorios"
+requires-python = ">=3.12"
+# Las dependencias se agregan con `uv add` (ver README).
+dependencies = [
+    "fastapi>=0.156.4",
+    "pydantic-settings>=2.16.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "C4", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
