@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medi_admin
+          POSTGRES_PASSWORD: ci-solo-para-pruebas
+          POSTGRES_DB: medi_clinic
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medi_admin -d medi_clinic"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      APP_DB_HOST: localhost
+      APP_TEST_DB: "1"
+      APP_SECRETS_DIR: ${{ github.workspace }}/secrets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Secretos locales y roles de BD
+        run: |
+          bash infra/scripts/gen-local-secrets.sh
+          bash infra/db/init-roles.sh
+        env:
+          PGHOST: localhost
+          PGPASSWORD: ci-solo-para-pruebas
+          POSTGRES_USER: medi_admin
+          POSTGRES_DB: medi_clinic
+          SECRETS_DIR: ${{ github.workspace }}/secrets
+          ROLES_SQL: ${{ github.workspace }}/infra/db/roles.sql
+
+      - name: Migraciones
+        run: cd backend && uv run alembic upgrade head
+
+      - name: ruff + pytest + mypy
+        run: make check

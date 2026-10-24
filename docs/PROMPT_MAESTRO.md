@@ -1,7 +1,41 @@
 # PROMPT MAESTRO — {{APP_NAME}}: agenda B2B para clínicas con recordatorios
 
 > Documento autocontenido. Pégalo al inicio de una sesión nueva (p. ej. Claude Code) y trabaja por fases.
-> Marcadores pendientes: `{{APP_NAME}}` y `{{DOMINIO}}` (nombre y dominio aún sin definir; úsalos en código, configuración y textos para que renombrar sea trivial).
+> Marcadores pendientes: `{{APP_NAME}}` y `{{DOMINIO}}` (nombre y dominio aún sin definir; úsalos en código, configuración y textos para que renombrar sea trivial). Nombre provisional de desarrollo: **medi-clinic**; dominio: `localhost`. Ambos viven solo en `backend/app/config.py`.
+> **Última actualización:** 2026-10-20. Ver la sección 0 para el estado actual: continúa desde el paso indicado ahí.
+
+---
+
+## 0. Estado actual y decisiones de implementación
+
+**Dónde vamos:** Fase 0, pasos 0.1 a 0.3 hechos. **Siguiente: paso 0.4** (base de datos). Pendiente de confirmar por el propietario: que el 0.3 pase con `make check` en su máquina.
+
+### 0.1 Pasos completados
+| Paso | Resultado |
+|---|---|
+| 0.1 Repo y estándares | Estructura de la sección 10, `pyproject.toml` (ruff, mypy strict, pytest), `.pre-commit-config.yaml` (ruff, ruff-format, mypy, gitleaks), `.gitignore`, `.env.example`, README, `Makefile`. |
+| 0.2 Docker Compose local | `backend/Dockerfile` (python:3.13-slim, uv, usuario sin root), `infra/docker-compose.yml` (`db` PostgreSQL 16 solo en red interna, `api` en `127.0.0.1:8000`, contenedor de solo lectura), `GET /health`, `infra/scripts/gen-local-secrets.sh`. Probado y funcionando. |
+| 0.3 Módulo de cifrado | `backend/app/crypto/`: `KeyProvider` + `FileKeyProvider`, DEK envuelta (`envelope.py`), cifrado de campos AES-256-GCM con AAD (`fields.py`), índice ciego (`blind_index.py`), rotación de KEK (`rewrap_dek`) y de DEK (`reencrypt`). 23 pruebas escritas. |
+
+### 0.2 Decisiones tomadas durante la implementación (prevalecen sobre el resto del documento si chocan)
+- **Python 3.13** (no 3.12). Gestor de dependencias: **uv**. Dependencias actuales: `fastapi`, `pydantic-settings`, `uvicorn`, `cryptography`; dev: `ruff`, `mypy`, `pytest` y `httpx2` (Starlette avisa que `httpx` está deprecado para su TestClient; verificar cuál quedó en `pyproject.toml`).
+- **Sin Mailpit.** Resend se usa por API HTTP, no SMTP. Las pruebas de correo usarán un cliente simulado (interfaz de proveedor de correo), no un servidor SMTP local.
+- **Secretos como archivos** en `./secrets/` (permisos 600, ignorados por git), nunca en variables de entorno. Variables de entorno con prefijo `APP_` (`APP_APP_NAME`, `APP_DOMINIO`, `APP_ENTORNO`, `APP_SECRETS_DIR`, `APP_KEK_ACTIVE_VERSION`).
+- **KEK:** archivos `secrets/kek_v1`, `kek_v2`… (32 bytes en base64); la versión activa se indica en `APP_KEK_ACTIVE_VERSION`. Se respalda aparte y fuera de línea.
+- **Valores cifrados:** columnas `BYTEA` con formato binario `formato(1) | versión_dek(4) | nonce(12) | cifrado+tag`; el encabezado va dentro del AAD. DEK envuelta: `formato(1) | versión_kek(4) | nonce(12) | cifrado+tag`, con AAD de contexto (`clinica|<uuid>|v<n>` o `plataforma|v<n>`).
+- **AAD de campos:** `tabla|columna|clinica_id|fila_id`; datos de plataforma usan `plataforma` en lugar de la clínica.
+- **Índice ciego:** HMAC-SHA256 con clave derivada por HKDF desde la DEK y la columna (`info = blind-index|<columna>`). Si se rota la DEK, los índices se recalculan junto con el recifrado.
+- **Rotación:** la biblioteca ya incluye `rewrap_dek` y `reencrypt`. Los **scripts por lotes sobre la base de datos** se escriben en la Fase 1, cuando existan las tablas.
+- **Normalización de teléfonos (E.164)** va en la Fase 2 (paso 1); el índice ciego recibe el valor ya normalizado. `normalize_email` (strip + minúsculas) ya existe.
+- **Docs de la API** (`/docs`, `/openapi.json`) solo cuando `APP_ENTORNO=local`.
+- Los secretos no se montan en `api` todavía (nada los usa); al hacerlo, cuidar que un usuario no root pueda leer el archivo.
+
+### 0.3 Convenciones de trabajo con el propietario
+- Comandos diarios con `make` (`make check`, `make up`, `make precommit`…); ver el README.
+- El propietario trabaja en Ubuntu, repo en `~/Documents/personal/medi-clinic`, con Docker Compose v2, uv y pre-commit instalados. El puerto 8000 está libre.
+- **La IA no ejecuta código ni revisa el repo local.** El propietario revisa y corre todo paso a paso en su máquina. La IA entrega **solo los archivos creados o modificados, uno por uno** (nunca un zip del proyecto completo) e indica qué comandos correr.
+- Al terminar cada paso, el propietario confirma que `make check` pasa antes de avanzar.
+- Prefiere explicaciones muy cortas; no domina terminología de seguridad: explicar conceptos nuevos en pocas líneas (KEK = llave maestra fuera de la base de datos; DEK = llave de datos por clínica; AAD = etiqueta que ata el dato a su fila; índice ciego = huella para buscar sin descifrar).
 
 ---
 
@@ -54,7 +88,7 @@ Aplicación web **B2B** para clínicas y consultorios pequeños de México (empe
 
 | Tema | Decisión |
 |---|---|
-| Stack backend | Python 3.12, FastAPI, SQLAlchemy 2 + Alembic, Pydantic v2, PostgreSQL 16 |
+| Stack backend | Python 3.13, FastAPI, SQLAlchemy 2 + Alembic, Pydantic v2, PostgreSQL 16 |
 | Stack frontend | React + TypeScript (Vite), mismo origen que la API (Caddy enruta `/api`) |
 | Hosting | VPS único, Docker Compose, Caddy (HTTPS automático) |
 | Dominio / DNS | Cloudflare (registro y DNS) |
@@ -230,10 +264,10 @@ Observabilidad: monitoreo de disponibilidad externo, rotación de logs (sin dato
 Orden: backend → frontend → endurecimiento. **Seguridad y devops base se resuelven en la Fase 0, antes de construir funciones.**
 
 ### Fase 0 — Cimientos (seguridad y devops primero)
-1. Repo y estándares: estructura de la sección 10, `pre-commit` (ruff, mypy, gitleaks), `.env.example`, README.
-2. Docker Compose local (api, db, correo de prueba local como Mailpit).
-3. **Módulo de cifrado**: `KeyProvider`, formato de valor, AAD, índice ciego, rotación. Pruebas: ida y vuelta, manipulación de AAD, rotación.
-4. Base de datos: Alembic, extensiones (`btree_gist`), tres roles de BD, plantilla de RLS, prueba de aislamiento entre clínicas.
+1. ✅ Repo y estándares: estructura de la sección 10, `pre-commit` (ruff, mypy, gitleaks), `.env.example`, README, Makefile.
+2. ✅ Docker Compose local (api, db). Sin Mailpit: Resend es por API.
+3. ✅ **Módulo de cifrado**: `KeyProvider`, formato de valor, AAD, índice ciego, rotación. Pruebas: ida y vuelta, manipulación de AAD, rotación. (Scripts de rotación por lotes sobre la base de datos: Fase 1.)
+4. ⏭️ **SIGUIENTE** — Base de datos: Alembic, extensiones (`btree_gist`), tres roles de BD, plantilla de RLS, prueba de aislamiento entre clínicas.
 5. Autenticación base: usuario, sesiones, argon2id, TOTP, invitaciones, límite de intentos, auditoría, `/health`.
 6. CI con todas las comprobaciones de la sección 11.
 7. Infra real: dominio en Cloudflare, VPS endurecido, Docker, Caddy, DNS y TLS, **despliegue del esqueleto** (`/health` + página vacía), respaldo cifrado **con restauración probada**, Resend verificado y correo de prueba entregado.
@@ -288,7 +322,7 @@ Orden: backend → frontend → endurecimiento. **Seguridad y devops base se res
 
 | Tema | Por defecto |
 |---|---|
-| Nombre y dominio | Pendiente (`{{APP_NAME}}`, `{{DOMINIO}}`) |
+| Nombre y dominio | Pendiente (`{{APP_NAME}}`, `{{DOMINIO}}`); provisional `medi-clinic` / `localhost` |
 | Proveedor de VPS | Pendiente |
 | Almacenamiento de respaldos | Cloudflare R2 o Backblaze B2 |
 | Horario del médico | Solo bloqueos puntuales dentro del horario de la clínica; horario semanal base como mejora posterior |
@@ -310,4 +344,6 @@ Orden: backend → frontend → endurecimiento. **Seguridad y devops base se res
 
 ## 15. Primer mensaje para iniciar
 
-> Lee este documento completo. Responde con: (1) tu resumen del proyecto en máximo 10 líneas, (2) las dudas que **bloqueen** la Fase 0 (solo las bloqueantes), (3) el plan detallado del paso 0.1 y 0.2. **No escribas código todavía.**
+> Lee este documento completo, **empezando por la sección 0 (estado actual)**. Responde con: (1) tu resumen del proyecto y de dónde vamos, en máximo 8 líneas, (2) las dudas que **bloqueen** el paso 0.4 (solo las bloqueantes) y el plan detallado del paso 0.4 en 5–10 líneas. **No escribas código todavía.**
+
+*(Primer mensaje original, para un proyecto desde cero: "Lee este documento completo. Responde con: resumen en máximo 10 líneas, dudas bloqueantes de la Fase 0 y plan detallado de los pasos 0.1 y 0.2. No escribas código todavía.")*

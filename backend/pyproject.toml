@@ -5,8 +5,13 @@ description = "Backend de medi-clinic: agenda B2B para clínicas con recordatori
 requires-python = ">=3.12"
 # Las dependencias se agregan con `uv add` (ver README).
 dependencies = [
+    "alembic>=1.20.1",
+    "cryptography>=50.0.2",
     "fastapi>=0.156.4",
+    "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.16.1",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "uvicorn>=0.54.0",
 ]
 
 [tool.ruff]
@@ -33,7 +38,9 @@ addopts = "-q"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.15.1",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.17.1",
 ]

@@ -1,0 +1,65 @@
+name: medi-clinic
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: medi_admin
+      POSTGRES_DB: medi_clinic
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+      - db_migrador_password
+      - db_app_password
+      - db_operador_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+      - ./db/roles.sql:/opt/roles.sql:ro
+    networks:
+      - internal # solo red interna: sin puertos publicados al host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medi_admin -d medi_clinic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    environment:
+      APP_ENTORNO: local
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - default
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true # sin salida a internet ni acceso desde el host
+
+secrets:
+  db_password:
+    file: ../secrets/db_password
+  db_migrador_password:
+    file: ../secrets/db_migrador_password
+  db_app_password:
+    file: ../secrets/db_app_password
+  db_operador_password:
+    file: ../secrets/db_operador_password
+
+volumes:
+  pgdata:
