@@ -25,7 +25,7 @@ jobs:
       APP_SECRETS_DIR: ${{ github.workspace }}/secrets
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
 
       - name: Secretos locales y roles de BD
         run: |
