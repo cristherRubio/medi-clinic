@@ -19,6 +19,7 @@ from app.api.deps import (
 from app.auth import audit, sessions
 from app.auth.passwords import hash_password, needs_rehash, verify_dummy, verify_password
 from app.auth.platform import PlatformCrypto
+from app.auth.recovery import hash_code
 from app.auth.sessions import SessionData, cookie_names, csrf_for
 from app.auth.throttle import clave_hash, esta_bloqueado, limpiar_fallos, registrar_fallo
 from app.auth.totp import verify_totp
@@ -37,6 +38,10 @@ class LoginIn(BaseModel):
 
 class TotpIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=16)
+
+
+class RecuperacionIn(BaseModel):
+    codigo: str = Field(min_length=1, max_length=32)
 
 
 class LoginOut(BaseModel):
@@ -160,45 +165,39 @@ async def login_totp(
     platform: PlatformDep,
     data: Annotated[SessionData, Depends(sesion_actual)],
 ) -> LoginOut:
-    if data.mfa_ok:
-        raise HTTPException(400, "La sesión ya está verificada")
-    settings = get_settings()
-    ip = client_ip(request, settings)
-    row = (
-        await db.execute(
-            text("SELECT email_idx, totp_secret FROM usuario WHERE id = :i"),
-            {"i": data.usuario_id},
-        )
-    ).one()
-    cuenta, por_ip = _claves(platform, bytes(row.email_idx), ip)
-    if await _bloqueado(db, cuenta, por_ip):
-        raise HTTPException(429, BLOQUEADO)
-
+    settings, ip, cuenta, por_ip, uid, cifrado = await _contexto_mfa(request, db, platform, data)
     paso = None
-    if row.totp_secret is not None:
-        secreto = platform.cipher.decrypt(
-            bytes(row.totp_secret), platform.ctx("totp_secret", data.usuario_id)
-        )
+    if cifrado is not None:
+        secreto = platform.cipher.decrypt(cifrado, platform.ctx("totp_secret", uid))
         paso = verify_totp(secreto, body.codigo)
-    if paso is None or not await consumir_paso(db, data.usuario_id, paso):
-        await _fallar(db, cuenta, por_ip, ip, data.usuario_id, "login_totp_fallido")
+    if paso is None or not await consumir_paso(db, uid, paso):
+        await _fallar(db, cuenta, por_ip, ip, uid, "login_totp_fallido")
+    await _subir_nivel(db, response, platform, settings, data, cuenta, ip, "totp")
+    return LoginOut(mfa_requerida=False)
 
-    await limpiar_fallos(db, cuenta, "login_cuenta")
-    await sessions.borrar(db, data.id)  # nueva sesión al subir de nivel
-    token = await sessions.crear(db, data.usuario_id, mfa_ok=True, ip=ip, settings=settings)
-    await db.execute(
-        text("UPDATE usuario SET ultimo_login = now() WHERE id = :i"), {"i": data.usuario_id}
-    )
-    await audit.registrar(
-        db,
-        accion="login_ok",
-        actor_usuario_id=data.usuario_id,
-        entidad="usuario",
-        entidad_id=data.usuario_id,
-        ip=ip,
-    )
-    await db.commit()
-    _poner_cookies(response, settings, platform, token, mfa_ok=True)
+
+@router.post("/login/recuperacion", dependencies=[Depends(verificar_csrf)])
+async def login_recuperacion(
+    body: RecuperacionIn,
+    request: Request,
+    response: Response,
+    db: SessionDep,
+    platform: PlatformDep,
+    data: Annotated[SessionData, Depends(sesion_actual)],
+) -> LoginOut:
+    settings, ip, cuenta, por_ip, uid, _ = await _contexto_mfa(request, db, platform, data)
+    usado = (
+        await db.execute(
+            text(
+                "UPDATE codigo_recuperacion SET usado_en = now() "
+                "WHERE usuario_id = :u AND codigo_hash = :h AND usado_en IS NULL RETURNING id"
+            ),
+            {"u": uid, "h": hash_code(body.codigo)},
+        )
+    ).first()
+    if usado is None:
+        await _fallar(db, cuenta, por_ip, ip, uid, "login_recuperacion_fallido")
+    await _subir_nivel(db, response, platform, settings, data, cuenta, ip, "recuperacion")
     return LoginOut(mfa_requerida=False)
 
 
@@ -240,3 +239,54 @@ async def me(
         es_operador=row.es_operador,
         totp_activo=row.totp_activo,
     )
+
+
+async def _contexto_mfa(
+    request: Request, db: AsyncSession, platform: PlatformCrypto, data: SessionData
+) -> tuple[Settings, str | None, bytes, bytes | None, UUID, bytes | None]:
+    """Comprobaciones comunes del segundo paso. Devuelve (settings, ip, cuenta, por_ip,
+    usuario_id, totp_secret)."""
+    if data.mfa_ok:
+        raise HTTPException(400, "La sesión ya está verificada")
+    settings = get_settings()
+    ip = client_ip(request, settings)
+    row = (
+        await db.execute(
+            text("SELECT email_idx, totp_secret FROM usuario WHERE id = :i"),
+            {"i": data.usuario_id},
+        )
+    ).one()
+    cuenta, por_ip = _claves(platform, bytes(row.email_idx), ip)
+    if await _bloqueado(db, cuenta, por_ip):
+        raise HTTPException(429, BLOQUEADO)
+    secreto = bytes(row.totp_secret) if row.totp_secret is not None else None
+    return settings, ip, cuenta, por_ip, data.usuario_id, secreto
+
+
+async def _subir_nivel(
+    db: AsyncSession,
+    response: Response,
+    platform: PlatformCrypto,
+    settings: Settings,
+    data: SessionData,
+    cuenta: bytes,
+    ip: str | None,
+    metodo: str,
+) -> None:
+    await limpiar_fallos(db, cuenta, "login_cuenta")
+    await sessions.borrar(db, data.id)  # nueva sesión al subir de nivel
+    token = await sessions.crear(db, data.usuario_id, mfa_ok=True, ip=ip, settings=settings)
+    await db.execute(
+        text("UPDATE usuario SET ultimo_login = now() WHERE id = :i"), {"i": data.usuario_id}
+    )
+    await audit.registrar(
+        db,
+        accion="login_ok",
+        actor_usuario_id=data.usuario_id,
+        entidad="usuario",
+        entidad_id=data.usuario_id,
+        ip=ip,
+        metadata={"metodo": metodo},
+    )
+    await db.commit()
+    _poner_cookies(response, settings, platform, token, mfa_ok=True)

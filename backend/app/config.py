@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # Cabecera con la IP real (p. ej. "CF-Connecting-IP").
     # Solo si el origen está detrás de Cloudflare.
     ip_header: str | None = None
+    # intentos por ip
+    activar_ip_max: int = 10
+    activar_ip_ventana_min: int = 15
+    activar_token_max: int = 5  # intentos de TOTP fallidos por invitación
+    activar_token_ventana_min: int = 15
 
     def read_secret(self, name: str) -> str:
         """Lee un secreto desde `<secrets_dir>/<name>`. Nunca se registra en logs."""

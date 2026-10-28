@@ -8,6 +8,7 @@ import pytest_asyncio
 from app.api.deps import get_platform, get_session
 from app.auth.passwords import hash_password
 from app.auth.platform import PlatformCrypto
+from app.auth.tokens import hash_token, new_token
 from app.auth.totp import new_totp_secret
 from app.crypto.envelope import generate_dek
 from app.db.session import make_engine
@@ -84,3 +85,28 @@ async def crear_usuario(
         )
         await s.commit()
     return Cuenta(uid, email, secreto)
+
+
+async def crear_invitacion(
+    engine: AsyncEngine, platform: PlatformCrypto, *, horas: int = 72
+) -> tuple[str, str]:
+    """Devuelve (token en claro, email). `horas` negativas = ya vencida."""
+    iid = uuid4()
+    email = f"{iid.hex}@prueba.invalid"
+    token = new_token()
+    async with AsyncSession(engine) as s:
+        await s.execute(
+            text(
+                "INSERT INTO invitacion (id, email, email_idx, rol, token_hash, expira_en) "
+                "VALUES (:i, :e, :x, 'admin', :h, now() + make_interval(hours => :hr))"
+            ),
+            {
+                "i": iid,
+                "e": platform.cipher.encrypt(email, platform.ctx("email", iid, tabla="invitacion")),
+                "x": platform.email_idx(email),
+                "h": hash_token(token),
+                "hr": horas,
+            },
+        )
+        await s.commit()
+    return token, email
