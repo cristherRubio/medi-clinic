@@ -18,3 +18,6 @@ up: ## Levanta db + api con Docker (reconstruye)
 
 down: ## Apaga los contenedores
 	$(COMPOSE) down
+
+migrate: ## Aplica migraciones
+	$(COMPOSE) --profile tools run --rm migrate

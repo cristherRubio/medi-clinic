@@ -7,6 +7,7 @@ from uuid import uuid4
 import pyotp
 import pytest
 from app.auth.passwords import hash_password
+from app.auth.platform import load_platform_crypto
 from app.auth.totp import new_totp_secret, verify_totp
 from app.crypto.keys import FileKeyProvider
 from app.db.session import make_engine
@@ -38,11 +39,13 @@ async def test_bootstrap_crea_operador_sin_filtrar_datos(
         )
         assert len(codigos) == 10
         async with AsyncSession(engine) as db:
+            platform = await load_platform_crypto(db, provider)
             u = (
                 await db.execute(
                     text(
-                        "SELECT id, email, es_operador, totp_activo FROM usuario WHERE es_operador"
-                    )
+                        "SELECT email, es_operador, totp_activo FROM usuario WHERE email_idx = :x"
+                    ),
+                    {"x": platform.email_idx(email)},
                 )
             ).one()
             assert u.es_operador
@@ -61,7 +64,13 @@ async def test_bootstrap_crea_operador_sin_filtrar_datos(
             assert texto not in caplog.text
     finally:
         async with AsyncSession(engine) as db:
-            await db.execute(text("DELETE FROM usuario WHERE es_operador"))
-            await db.execute(text("DELETE FROM llave_plataforma"))
+            rows = (await db.execute(text("SELECT 1 FROM llave_plataforma"))).first()
+            if rows:
+                platform = await load_platform_crypto(db, provider)
+                await db.execute(
+                    text("DELETE FROM usuario WHERE email_idx = :x"),
+                    {"x": platform.email_idx(email)},
+                )
+                await db.execute(text("DELETE FROM llave_plataforma"))
             await db.commit()
         await engine.dispose()

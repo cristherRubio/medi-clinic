@@ -51,6 +51,29 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  migrate:
+    build:
+      context: ../backend
+    profiles: [tools]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      APP_ENTORNO: local
+      APP_SECRETS_DIR: /run/secrets
+    secrets:
+      - db_migrador_password
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   bootstrap:
     build:
       context: ../backend
