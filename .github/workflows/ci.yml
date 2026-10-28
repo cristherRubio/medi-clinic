@@ -69,9 +69,7 @@ jobs:
       - name: Construir imagen del backend
         run: docker build -t medi-clinic-api:ci backend
       - name: Trivy (falla con HIGH/CRITICAL que ya tengan parche)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: medi-clinic-api:ci
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:latest image --severity HIGH,CRITICAL
+          --ignore-unfixed --exit-code 1 medi-clinic-api:ci
