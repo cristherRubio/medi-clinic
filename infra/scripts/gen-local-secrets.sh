@@ -14,9 +14,9 @@ gen() {
   if [[ -f "$DIR/$1" ]]; then
     echo "secrets/$1 ya existe; no se sobrescribe."
   else
-    bash -c "$2" | tr -d '\n' > "$DIR/$1"
-    chmod 600 "$DIR/$1"
-    echo "secrets/$1 creado (permisos 600)."
+   bash -c "$2" | tr -d '\n' > "$DIR/$1"
+    chmod 644 "$DIR/$1"
+    echo "secrets/$1 creado (permisos 644; la carpeta es 700)."
   fi
 }
 

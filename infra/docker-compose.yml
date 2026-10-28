@@ -31,6 +31,10 @@ services:
     restart: unless-stopped
     environment:
       APP_ENTORNO: local
+      APP_SECRETS_DIR: /run/secrets
+    secrets:
+      - db_app_password
+      - kek_v1
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -47,11 +51,37 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  bootstrap:
+    build:
+      context: ../backend
+    profiles: [tools]
+    command: ["python", "-m", "app.scripts.bootstrap_platform"]
+    environment:
+      APP_ENTORNO: local
+      APP_SECRETS_DIR: /run/secrets
+    secrets:
+      - db_migrador_password
+      - kek_v1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   internal:
     internal: true # sin salida a internet ni acceso desde el host
 
 secrets:
+  kek_v1:
+    file: ../secrets/kek_v1
   db_password:
     file: ../secrets/db_password
   db_migrador_password:
