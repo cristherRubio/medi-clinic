@@ -10,11 +10,12 @@ ENV UV_COMPILE_BYTECODE=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
+RUN rm -rf /usr/local/lib/python3.13/site-packages/pip* /usr/local/bin/pip*
 
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 COPY app ./app
 COPY alembic ./alembic
