@@ -44,3 +44,34 @@ jobs:
 
       - name: ruff + pytest + mypy
         run: make check
+
+      - name: pip-audit (dependencias de producción)
+        run: |
+          cd backend
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/req.txt
+          uvx pip-audit -r /tmp/req.txt --no-deps --disable-pip
+
+  secretos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historial completo
+      - name: gitleaks
+        run: >-
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest
+          detect --source /repo --redact --verbose
+
+  imagen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir imagen del backend
+        run: docker build -t medi-clinic-api:ci backend
+      - name: Trivy (falla con HIGH/CRITICAL que ya tengan parche)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: medi-clinic-api:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
