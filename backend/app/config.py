@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     db_host: str = "db"
     db_port: int = 5432
     db_name: str = "medi_clinic"
+    # Duracion de sesiones e invite
+    session_idle_hours: int = 8
+    session_max_hours: int = 24
+    invitacion_horas: int = 72
+    # Límite de intentos fallidos: (máximo, ventana en minutos)
+    login_cuenta_max: int = 5
+    login_cuenta_ventana_min: int = 5
+    login_ip_max: int = 20
+    login_ip_ventana_min: int = 20
 
     def read_secret(self, name: str) -> str:
         """Lee un secreto desde `<secrets_dir>/<name>`. Nunca se registra en logs."""
