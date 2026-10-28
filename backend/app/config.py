@@ -38,10 +38,19 @@ class Settings(BaseSettings):
     login_cuenta_ventana_min: int = 5
     login_ip_max: int = 20
     login_ip_ventana_min: int = 20
+    # vida de la sesión entre contraseña y TOTP
+    sesion_pendiente_min: int = 10
+    # Cabecera con la IP real (p. ej. "CF-Connecting-IP").
+    # Solo si el origen está detrás de Cloudflare.
+    ip_header: str | None = None
 
     def read_secret(self, name: str) -> str:
         """Lee un secreto desde `<secrets_dir>/<name>`. Nunca se registra en logs."""
         return (self.secrets_dir / name).read_text(encoding="utf-8").strip()
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.entorno != "local"
 
     def database_url(self, rol: str) -> URL:
         """URL async de un rol de BD (`migrador`, `app` u `operador`)."""

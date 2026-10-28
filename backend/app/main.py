@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 
+from app.api.auth import router as auth_router
 from app.config import get_settings
+from app.security import add_security_headers
 
 
 def create_app() -> FastAPI:
@@ -12,6 +14,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json" if es_local else None,
     )
+    add_security_headers(app, es_local)
+    app.include_router(auth_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
