@@ -1,19 +1,18 @@
 # medi-clinic
 
-Agenda B2B para clínicas con recordatorios. Especificación completa: [`docs/PROMPT_MAESTRO.md`](docs/PROMPT_MAESTRO.md).
+Agenda web para clínicas y consultorios pequeños, con recordatorios de citas y datos de pacientes cifrados.
+
+> Nombre y dominio provisionales. Se cambian en `backend/app/config.py`.
 
 ## Estructura
 
 ```
-backend/   FastAPI (uv, Python 3.13)
-  app/       config.py, main.py, crypto/ (cifrado de campos), db/ (motor async y RLS), auth/ (contraseñas, TOTP, tokens)
-  alembic/   migraciones (se ejecutan con el rol `migrador`)
-  tests/     crypto, auth y db (las de db solo corren en CI)
-frontend/  React + TypeScript (Vite)
-infra/     docker-compose, db/ (roles y su script de init), scripts/, (Caddy y respaldos más adelante)
-docs/      prompt maestro, runbooks, borradores legales
-.github/   CI (Postgres 16, roles, migraciones, ruff + pytest + mypy)
-Makefile   atajos de desarrollo (`make` muestra la lista)
+backend/   API (FastAPI, Python 3.13, uv)
+frontend/  Interfaz (React + TypeScript), pendiente
+infra/     Docker Compose, roles de la base de datos y script de secretos locales
+docs/      Documentación del proyecto
+.github/   CI y Dependabot
+Makefile   Atajos de desarrollo (`make` muestra la lista)
 ```
 
 ## Requisitos
@@ -24,49 +23,88 @@ Makefile   atajos de desarrollo (`make` muestra la lista)
 
 ```bash
 bash infra/scripts/gen-local-secrets.sh   # crea los secretos en ./secrets (no sobrescribe)
-(cd backend && uv sync)                   # instala dependencias desde uv.lock
-pre-commit install                        # hook de pre-commit (una vez por clon)
+(cd backend && uv sync)                   # instala dependencias
+pre-commit install                        # una vez por clon
 make check                                # ruff + pytest + mypy
-make up                                   # levanta db + api con Docker
+make up                                   # levanta base de datos y API
+make migrate                              # aplica las migraciones
+docker compose -f infra/docker-compose.yml --profile tools run --rm bootstrap   # crea el primer operador
 curl localhost:8000/health                # {"status":"ok"}
 ```
 
-Si cambian los roles o secretos de la base y ya existía el volumen, hay que recrearlo
-(**borra los datos de desarrollo**): `make down` y luego `docker compose -f infra/docker-compose.yml down -v`.
+### Primer operador
+
+El operador es el dueño de la plataforma: crea clínicas e invita a sus administradores. No ve datos de pacientes.
+
+El script pide email y contraseña (12 a 128 caracteres) y muestra un secreto para tu app de autenticación:
+
+1. En la app (Google Authenticator, Aegis…) elige "ingresar clave manualmente", pega el secreto y deja tipo basado en tiempo (6 dígitos, 30 s).
+2. Escribe en el script el código de 6 dígitos que muestre la app.
+3. Guarda los 10 códigos de recuperación: se muestran una sola vez.
+
+Si el script falla antes de terminar no se guarda nada; borra esa entrada del autenticador y vuelve a correrlo (genera un secreto nuevo cada vez). Solo puede ejecutarse una vez por base de datos.
+
+### Empezar de cero
+
+Borra los datos de desarrollo:
+
+```bash
+docker compose -f infra/docker-compose.yml down -v
+make up
+make migrate
+docker compose -f infra/docker-compose.yml --profile tools run --rm bootstrap
+```
+
+Los roles de la base de datos se crean solo cuando el volumen está vacío. Si regeneras los secretos, hay que borrar el volumen con `down -v`; si no, la API no podrá conectarse.
 
 ## Comandos
 
 | Comando | Qué hace |
 |---|---|
 | `make` | muestra la ayuda |
-| `make check` | ruff + pytest + mypy (lo que corre el CI) |
+| `make check` | ruff + pytest + mypy (lo mismo que corre el CI) |
 | `make format` | formatea y corrige con ruff |
-| `make up` / `make down` | levanta (reconstruye) / apaga db + api |
+| `make up` / `make down` | levanta (reconstruyendo) / apaga base de datos y API |
+| `make migrate` | aplica las migraciones |
 
-## Pruebas de base de datos
+## Pruebas
 
-`db` está en una red Docker interna, sin puertos al host, así que **las pruebas de BD corren solo en CI**
-(GitHub Actions levanta un Postgres 16, crea los roles y migra). En local se saltan (`skipped`);
-se activan con `APP_TEST_DB=1`. Para verificar un cambio de BD: empuja una rama y revisa que el CI esté en verde
-y que esas pruebas aparezcan como *passed*.
+La base de datos está en una red interna de Docker, sin puertos hacia tu máquina, así que las pruebas que la usan **solo corren en CI** (GitHub Actions). En local aparecen como `skipped`. Para verificar un cambio de base de datos, sube una rama y revisa que el CI esté en verde y que esas pruebas salgan como `passed`.
+
+## CI
+
+Tres jobs en `.github/workflows/ci.yml`:
+
+- **backend:** Postgres 16, migraciones, `make check` y `pip-audit` sobre las dependencias.
+- **secretos:** gitleaks sobre todo el historial.
+- **imagen:** construye la imagen del backend y la escanea con Trivy.
+
+Dependabot abre PRs semanales (Python, Docker y GitHub Actions). Fusiónalos solo con el CI en verde.
+
+## Secretos
+
+Son archivos en `./secrets/`, ignorados por git. Nunca van en variables de entorno.
+
+| Archivo | Uso |
+|---|---|
+| `db_password` | Superusuario de Postgres; solo crea los roles al iniciar |
+| `db_migrador_password` | Rol dueño de las tablas (migraciones y bootstrap) |
+| `db_app_password` | Rol de la API |
+| `db_operador_password` | Rol del operador |
+| `kek_v1` | Llave maestra de cifrado |
+
+**Si pierdes `kek_vN` pierdes todos los datos cifrados.** Respáldala aparte y fuera de línea.
+
+En desarrollo los archivos quedan con permisos 644 dentro de una carpeta 700, porque Docker Compose no cambia el dueño al montarlos y el contenedor debe poder leerlos. En producción se resuelve de otra forma.
 
 ## Configuración
 
-Nombre y dominio viven solo en `backend/app/config.py` (`APP_NAME_DEFAULT`, `DOMINIO_DEFAULT`)
-y se sobrescriben con variables de entorno con prefijo `APP_`:
-`APP_APP_NAME`, `APP_DOMINIO`, `APP_ENTORNO`, `APP_SECRETS_DIR`, `APP_KEK_ACTIVE_VERSION`,
-`APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_SESSION_IDLE_HOURS`, `APP_SESSION_MAX_HOURS`, `APP_INVITACION_HORAS`.
-No hay `.env.example`: los valores por defecto sirven en local y los secretos van en archivos.
+Las opciones se sobrescriben con variables de entorno con prefijo `APP_` (por ejemplo `APP_ENTORNO`, `APP_DB_HOST`, `APP_SECRETS_DIR`). Los valores por defecto sirven en local; la lista completa está en `backend/app/config.py`.
 
-## Secretos y cifrado
+## Correo en desarrollo
 
-- Los secretos son **archivos** en `./secrets/` (permisos 600), nunca en git ni en variables de entorno:
-  `db_password` (superusuario de Postgres, solo crea los roles), `db_migrador_password`, `db_app_password`,
-  `db_operador_password` y `kek_vN`.
-- `secrets/kek_vN` es la llave maestra (KEK). **Si se pierde, se pierden todos los datos cifrados:** respáldala aparte y fuera de línea.
-- Los datos personales se cifran por campo (AES-256-GCM) con una llave por clínica (DEK), envuelta con la KEK. Ver `backend/app/crypto/` y la sección 8 del prompt maestro.
-- Tres roles de BD: `migrador` (dueño de tablas), `app` (la API; RLS aplica) y `operador` (permisos solo sobre `usuario`, `invitacion` y lo mínimo).
+Se usa Resend por su API, sin dominio propio: crea una cuenta, guarda la API key en `secrets/resend_api_key` y usa el remitente de pruebas de Resend, que solo entrega al correo del dueño de la cuenta. Las pruebas automáticas usan un cliente simulado.
 
-## Reglas
+## Privacidad
 
-Sin datos personales en logs, URLs ni pruebas (ver sección 8 del prompt maestro).
+Los datos personales nunca se guardan en claro, ni aparecen en logs, URLs o pruebas.
