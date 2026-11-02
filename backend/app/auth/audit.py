@@ -44,8 +44,9 @@ async def registrar(
     await session.execute(
         text(
             "INSERT INTO auditoria (clinica_id, actor_usuario_id, accion, entidad, "
-            "entidad_id, ip, metadata) VALUES (:cl, :ac, :ax, :en, :ei, "
-            "CAST(:ip AS inet), CAST(:m AS jsonb))"
+            "entidad_id, ip, metadata) VALUES ("
+            "COALESCE(:cl, nullif(current_setting('app.clinica_id', true), '')::uuid), "
+            ":ac, :ax, :en, :ei, CAST(:ip AS inet), CAST(:m AS jsonb))"
         ),
         {
             "cl": clinica_id,
