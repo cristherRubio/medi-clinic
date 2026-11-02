@@ -76,7 +76,6 @@ async def test_auditoria_inserta_y_rechaza_datos_personales() -> None:
     clinica, ent = uuid4(), uuid4()
     engine = make_engine("app")
     try:
-        # Con contexto de clínica, `clinica_id` toma el contexto y la fila es visible.
         async with clinic_session(engine, clinica) as s:
             await audit.registrar(
                 s, accion="prueba", entidad="x", entidad_id=ent, ip="127.0.0.1", metadata={"k": 1}
