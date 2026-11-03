@@ -5,12 +5,14 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from app.api.deps import get_platform, get_session
+from app.api.deps import get_key_provider, get_platform, get_session
+from app.api.operator import get_operador_session
 from app.auth.passwords import hash_password
 from app.auth.platform import PlatformCrypto
 from app.auth.tokens import hash_token, new_token
 from app.auth.totp import new_totp_secret
-from app.crypto.envelope import generate_dek
+from app.crypto.envelope import generate_dek, wrap_dek
+from app.crypto.keys import KeyProvider
 from app.db.session import make_engine
 from app.main import create_app
 from sqlalchemy import text
@@ -20,10 +22,30 @@ from starlette.testclient import TestClient
 PASSWORD = "clave-de-prueba-larga"
 
 
+class _Provider(KeyProvider):
+    """KEK en memoria para pruebas."""
+
+    def __init__(self) -> None:
+        self._kek = os.urandom(32)
+
+    @property
+    def active_version(self) -> int:
+        return 1
+
+    def get_kek(self, version: int) -> bytes:
+        return self._kek
+
+
 class Cuenta(NamedTuple):
     id: UUID
     email: str
     totp_secret: str | None
+
+
+class Invitacion(NamedTuple):
+    token: str
+    email: str
+    clinica_id: UUID
 
 
 @pytest.fixture
@@ -32,7 +54,11 @@ def platform() -> PlatformCrypto:
 
 
 @pytest.fixture
-def client(platform: PlatformCrypto) -> Iterator[TestClient]:
+def provider() -> KeyProvider:
+    return _Provider()
+
+
+def _cliente(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestClient]:
     async def _session() -> AsyncIterator[AsyncSession]:
         engine = make_engine("app")  # uno por petición: evita mezclar bucles de eventos
         try:
@@ -41,11 +67,32 @@ def client(platform: PlatformCrypto) -> Iterator[TestClient]:
         finally:
             await engine.dispose()
 
+    async def _session_operador() -> AsyncIterator[AsyncSession]:
+        engine = make_engine("operador")
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as s:
+                yield s
+        finally:
+            await engine.dispose()
+
     app = create_app()
     app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_operador_session] = _session_operador
     app.dependency_overrides[get_platform] = lambda: platform
+    app.dependency_overrides[get_key_provider] = lambda: provider
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def client(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestClient]:
+    yield from _cliente(platform, provider)
+
+
+@pytest.fixture
+def otro_client(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestClient]:
+    """Segundo cliente con sus propias cookies (p. ej. operador + admin a la vez)."""
+    yield from _cliente(platform, provider)
 
 
 @pytest_asyncio.fixture
@@ -87,26 +134,63 @@ async def crear_usuario(
     return Cuenta(uid, email, secreto)
 
 
-async def crear_invitacion(
-    engine: AsyncEngine, platform: PlatformCrypto, *, horas: int = 72
-) -> tuple[str, str]:
-    """Devuelve (token en claro, email). `horas` negativas = ya vencida."""
+async def crear_clinica(provider: KeyProvider) -> UUID:
+    """Alta por el motor `operador` (única vía). Con DEK real, para poder cifrar personal."""
+    cid, dek = uuid4(), generate_dek()
+    e = make_engine("operador")
+    try:
+        async with e.begin() as c:
+            await c.execute(
+                text(
+                    "INSERT INTO clinica (id, nombre, tipo_persona, nombre_legal, rfc, "
+                    "representante_nombre, representante_curp, dek_wrapped, dek_version) "
+                    "VALUES (:id, 'test', 'fisica', 'test', :x, :x, :x, :w, 1)"
+                ),
+                {"id": cid, "x": b"x", "w": wrap_dek(provider, dek, f"clinica|{cid}|v1")},
+            )
+    finally:
+        await e.dispose()
+    return cid
+
+
+async def crear_invitacion_completa(
+    engine: AsyncEngine,
+    platform: PlatformCrypto,
+    provider: KeyProvider,
+    *,
+    horas: int = 72,
+    rol: str = "admin",
+    email: str | None = None,
+    clinica_id: UUID | None = None,
+) -> Invitacion:
+    """`horas` negativas = ya vencida. `email` permite invitar a un usuario existente."""
     iid = uuid4()
-    email = f"{iid.hex}@prueba.invalid"
+    email = email or f"{iid.hex}@prueba.invalid"
+    cid = clinica_id or await crear_clinica(provider)
     token = new_token()
     async with AsyncSession(engine) as s:
         await s.execute(
             text(
-                "INSERT INTO invitacion (id, email, email_idx, rol, token_hash, expira_en) "
-                "VALUES (:i, :e, :x, 'admin', :h, now() + make_interval(hours => :hr))"
+                "INSERT INTO invitacion (id, email, email_idx, clinica_id, rol, token_hash, "
+                "expira_en) VALUES (:i, :e, :x, :c, :r, :h, now() + make_interval(hours => :hr))"
             ),
             {
                 "i": iid,
                 "e": platform.cipher.encrypt(email, platform.ctx("email", iid, tabla="invitacion")),
                 "x": platform.email_idx(email),
+                "c": cid,
+                "r": rol,
                 "h": hash_token(token),
                 "hr": horas,
             },
         )
         await s.commit()
-    return token, email
+    return Invitacion(token, email, cid)
+
+
+async def crear_invitacion(
+    engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider, *, horas: int = 72
+) -> tuple[str, str]:
+    """Devuelve (token en claro, email)."""
+    inv = await crear_invitacion_completa(engine, platform, provider, horas=horas)
+    return inv.token, inv.email

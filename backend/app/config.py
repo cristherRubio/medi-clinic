@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     session_idle_hours: int = 8
     session_max_hours: int = 24
     invitacion_horas: int = 72
+    # versión vigente de términos y aviso de privacidad
+    legal_version: str = "1"
     # Límite de intentos fallidos: (máximo, ventana en minutos)
     login_cuenta_max: int = 5
     login_cuenta_ventana_min: int = 5

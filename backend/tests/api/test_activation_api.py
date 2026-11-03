@@ -6,6 +6,7 @@ import pyotp
 import pytest
 from app.auth.platform import PlatformCrypto
 from app.auth.recovery import generate_recovery_codes, hash_code
+from app.crypto.keys import KeyProvider
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette.testclient import TestClient
@@ -25,11 +26,23 @@ def _csrf(client: TestClient) -> dict[str, str]:
     return {"X-CSRF-Token": client.cookies["csrf"]}
 
 
+def _confirmar(client: TestClient, token: str, secreto: str, codigo: str | None = None):  # type: ignore[no-untyped-def]
+    return client.post(
+        CONFIRMAR,
+        json={
+            "token": token,
+            "codigo": codigo or pyotp.TOTP(secreto).now(),
+            "nombre": "Admin Prueba",
+            "acepta_terminos": True,
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_activacion_completa(
-    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto
+    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider
 ) -> None:
-    token, email = await crear_invitacion(engine, platform)
+    token, email = await crear_invitacion(engine, platform, provider)
     r = client.post(INICIAR, json={"token": token, "password": PASSWORD})
     assert r.status_code == 200
     secreto = r.json()["totp_secret"]
@@ -38,11 +51,14 @@ async def test_activacion_completa(
     # A medias no se puede entrar.
     assert client.post(LOGIN, json={"email": email, "password": PASSWORD}).status_code == 401
 
-    ok = client.post(CONFIRMAR, json={"token": token, "codigo": pyotp.TOTP(secreto).now()})
+    ok = _confirmar(client, token, secreto)
     assert ok.status_code == 200
     codigos = ok.json()["codigos_recuperacion"]
     assert len(codigos) == 10
-    assert client.get("/api/auth/me").json()["email"] == email
+    me = client.get("/api/auth/me").json()
+    assert me["email"] == email
+    assert me["clinica_id"] is not None
+    assert me["personal_id"] is not None
 
     # La invitación es de un solo uso.
     assert client.post(INICIAR, json={"token": token, "password": PASSWORD}).status_code == 400
@@ -50,9 +66,9 @@ async def test_activacion_completa(
 
 @pytest.mark.asyncio
 async def test_invitacion_invalida_o_vencida_es_uniforme(
-    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto
+    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider
 ) -> None:
-    vencida, _ = await crear_invitacion(engine, platform, horas=-1)
+    vencida, _ = await crear_invitacion(engine, platform, provider, horas=-1)
     a = client.post(INICIAR, json={"token": vencida, "password": PASSWORD})
     b = client.post(INICIAR, json={"token": "x" * 43, "password": PASSWORD})
     assert a.status_code == b.status_code == 400
@@ -61,23 +77,23 @@ async def test_invitacion_invalida_o_vencida_es_uniforme(
 
 @pytest.mark.asyncio
 async def test_codigo_malo_no_consume_la_invitacion(
-    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto
+    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider
 ) -> None:
-    token, _ = await crear_invitacion(engine, platform)
+    token, _ = await crear_invitacion(engine, platform, provider)
     secreto = client.post(INICIAR, json={"token": token, "password": PASSWORD}).json()[
         "totp_secret"
     ]
-    mal = client.post(CONFIRMAR, json={"token": token, "codigo": "000000"})
+    mal = _confirmar(client, token, secreto, codigo="000000")
     assert mal.status_code == 400
-    bien = client.post(CONFIRMAR, json={"token": token, "codigo": pyotp.TOTP(secreto).now()})
+    bien = _confirmar(client, token, secreto)
     assert bien.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_politica_de_contrasena(
-    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto
+    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider
 ) -> None:
-    token, _ = await crear_invitacion(engine, platform)
+    token, _ = await crear_invitacion(engine, platform, provider)
     assert client.post(INICIAR, json={"token": token, "password": "corta"}).status_code == 422
 
 
