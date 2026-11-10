@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy import text
 
 from app.api.authz import Actor, requerir
@@ -21,7 +21,7 @@ NombreSala = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 
 
 class SalaIn(BaseModel):
-    nombre: str = Field(min_length=1, max_length=80)
+    nombre: NombreSala
 
 
 class SalaPatch(BaseModel):
