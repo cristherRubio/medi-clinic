@@ -24,7 +24,7 @@ jobs:
       APP_TEST_DB: "1"
       APP_SECRETS_DIR: ${{ github.workspace }}/secrets
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
 
       - name: Secretos locales y roles de BD
@@ -54,7 +54,7 @@ jobs:
   secretos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # historial completo
       - name: gitleaks
@@ -65,7 +65,7 @@ jobs:
   imagen:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Construir imagen del backend
         run: docker build -t medi-clinic-api:ci backend
       - name: Trivy (falla con HIGH/CRITICAL que ya tengan parche)
