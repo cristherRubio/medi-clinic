@@ -7,10 +7,13 @@ import pytest
 import pytest_asyncio
 from app.api.deps import get_key_provider, get_platform, get_session
 from app.api.operator import get_operador_session
+from app.auth import membership, sessions
 from app.auth.passwords import hash_password
 from app.auth.platform import PlatformCrypto
+from app.auth.sessions import cookie_names, csrf_for
 from app.auth.tokens import hash_token, new_token
 from app.auth.totp import new_totp_secret
+from app.config import get_settings
 from app.crypto.envelope import generate_dek, wrap_dek
 from app.crypto.keys import KeyProvider
 from app.db.session import make_engine
@@ -194,3 +197,52 @@ async def crear_invitacion(
     """Devuelve (token en claro, email)."""
     inv = await crear_invitacion_completa(engine, platform, provider, horas=horas)
     return inv.token, inv.email
+
+
+class Miembro(NamedTuple):
+    uid: UUID
+    pid: UUID
+    email: str
+
+
+async def crear_personal(
+    engine: AsyncEngine,
+    provider: KeyProvider,
+    cid: UUID,
+    uid: UUID,
+    rol: str,
+    nombre: str = "Prueba",
+) -> UUID:
+    async with AsyncSession(engine) as s:
+        pid = await membership.crear_personal(
+            s, provider, clinica_id=cid, usuario_id=uid, rol=rol, nombre=nombre
+        )
+        await s.commit()
+    return pid
+
+
+async def crear_equipo(
+    engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider, *roles: str
+) -> tuple[UUID, list[Miembro]]:
+    """Clínica nueva con una persona por rol (nombres 'Persona 0', 'Persona 1'...)."""
+    cid = await crear_clinica(provider)
+    miembros = []
+    for i, rol in enumerate(roles):
+        u = await crear_usuario(engine, platform)
+        pid = await crear_personal(engine, provider, cid, u.id, rol, f"Persona {i}")
+        miembros.append(Miembro(u.id, pid, u.email))
+    return cid, miembros
+
+
+async def como(
+    c: TestClient, engine: AsyncEngine, platform: PlatformCrypto, cid: UUID, m: Miembro
+) -> dict[str, str]:
+    """Abre sesión de `m` en el cliente `c` y devuelve la cabecera CSRF."""
+    settings = get_settings()
+    async with AsyncSession(engine) as s:
+        token = await sessions.crear(
+            s, m.uid, mfa_ok=True, ip=None, settings=settings, clinica_id=cid, personal_id=m.pid
+        )
+        await s.commit()
+    c.cookies.set(cookie_names(settings)[0], token)
+    return {"X-CSRF-Token": csrf_for(platform.csrf_key, token)}

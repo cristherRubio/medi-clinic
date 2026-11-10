@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from app.api.activation import router as activation_router
 from app.api.auth import router as auth_router
 from app.api.operator import router as operator_router
+from app.api.personal import router as personal_router
+from app.api.salas import router as salas_router
 from app.config import get_settings
 from app.security import add_security_headers
 
@@ -20,6 +22,8 @@ def create_app() -> FastAPI:
     app.include_router(activation_router)
     app.include_router(auth_router)
     app.include_router(operator_router)
+    app.include_router(personal_router)
+    app.include_router(salas_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

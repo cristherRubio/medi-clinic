@@ -18,6 +18,9 @@ ESPERADO: dict[Accion, tuple[Alcance | None, Alcance | None, Alcance | None]] = 
     Accion.GESTIONAR_SALAS: (T, None, None),
     Accion.CONFIGURAR_CLINICA: (T, None, None),
     Accion.BORRAR: (T, None, None),
+    Accion.VER_PERSONAL: (T, T, P),
+    Accion.EDITAR_PERSONAL: (T, None, None),
+    Accion.VER_SALAS: (T, T, T),
 }
 ROLES = (Rol.ADMIN, Rol.ASISTENTE, Rol.MEDICO)
 
