@@ -28,20 +28,38 @@ class SessionData:
     usuario_id: UUID
     mfa_ok: bool
     token: str
+    clinica_id: UUID | None = None
+    personal_id: UUID | None = None
 
 
 async def crear(
-    db: AsyncSession, usuario_id: UUID, *, mfa_ok: bool, ip: str | None, settings: Settings
+    db: AsyncSession,
+    usuario_id: UUID,
+    *,
+    mfa_ok: bool,
+    ip: str | None,
+    settings: Settings,
+    clinica_id: UUID | None = None,
+    personal_id: UUID | None = None,
 ) -> str:
     """Crea la sesión y devuelve el token en claro (solo va en la cookie)."""
     token = new_token()
     minutos = settings.session_max_hours * 60 if mfa_ok else settings.sesion_pendiente_min
     await db.execute(
         text(
-            "INSERT INTO sesion (usuario_id, token_hash, mfa_ok, expira_en, ip) "
-            "VALUES (:u, :h, :m, now() + make_interval(mins => :e), CAST(:ip AS inet))"
+            "INSERT INTO sesion (usuario_id, token_hash, mfa_ok, expira_en, ip, "
+            "clinica_id, personal_id) "
+            "VALUES (:u, :h, :m, now() + make_interval(mins => :e), CAST(:ip AS inet), :c, :p)"
         ),
-        {"u": usuario_id, "h": hash_token(token), "m": mfa_ok, "e": minutos, "ip": ip},
+        {
+            "u": usuario_id,
+            "h": hash_token(token),
+            "m": mfa_ok,
+            "e": minutos,
+            "ip": ip,
+            "c": clinica_id,
+            "p": personal_id,
+        },
     )
     return token
 
@@ -51,7 +69,7 @@ async def buscar(db: AsyncSession, token: str, settings: Settings) -> SessionDat
     row = (
         await db.execute(
             text(
-                "SELECT s.id, s.usuario_id, s.mfa_ok, "
+                "SELECT s.id, s.usuario_id, s.mfa_ok, s.clinica_id, s.personal_id, "
                 "(s.ultimo_uso < now() - interval '1 minute') AS vieja "
                 "FROM sesion s JOIN usuario u ON u.id = s.usuario_id "
                 "WHERE s.token_hash = :h AND s.expira_en > now() "
@@ -64,7 +82,16 @@ async def buscar(db: AsyncSession, token: str, settings: Settings) -> SessionDat
         return None
     if row.vieja:
         await db.execute(text("UPDATE sesion SET ultimo_uso = now() WHERE id = :i"), {"i": row.id})
-    return SessionData(row.id, row.usuario_id, row.mfa_ok, token)
+    return SessionData(row.id, row.usuario_id, row.mfa_ok, token, row.clinica_id, row.personal_id)
+
+
+async def asignar_contexto(
+    db: AsyncSession, sesion_id: UUID, clinica_id: UUID, personal_id: UUID
+) -> None:
+    await db.execute(
+        text("UPDATE sesion SET clinica_id = :c, personal_id = :p WHERE id = :i"),
+        {"c": clinica_id, "p": personal_id, "i": sesion_id},
+    )
 
 
 async def borrar(db: AsyncSession, sesion_id: UUID) -> None:

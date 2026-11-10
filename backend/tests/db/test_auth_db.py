@@ -70,19 +70,26 @@ async def test_tipos_no_se_mezclan(session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auditoria_inserta_y_rechaza_datos_personales(session: AsyncSession) -> None:
-    ent = uuid4()
-    await audit.registrar(
-        session, accion="prueba", entidad="x", entidad_id=ent, ip="127.0.0.1", metadata={"k": 1}
-    )
-    n = (
-        await session.execute(
-            text("SELECT count(*) FROM auditoria WHERE entidad_id = :e"), {"e": ent}
-        )
-    ).scalar_one()
-    assert n == 1
-    with pytest.raises(audit.AuditMetadataError):
-        await audit.registrar(session, accion="prueba", metadata={"email": "a@b.c"})
+async def test_auditoria_inserta_y_rechaza_datos_personales() -> None:
+    from app.db.session import clinic_session
+
+    clinica, ent = uuid4(), uuid4()
+    engine = make_engine("app")
+    try:
+        async with clinic_session(engine, clinica) as s:
+            await audit.registrar(
+                s, accion="prueba", entidad="x", entidad_id=ent, ip="127.0.0.1", metadata={"k": 1}
+            )
+            n = (
+                await s.execute(
+                    text("SELECT count(*) FROM auditoria WHERE entidad_id = :e"), {"e": ent}
+                )
+            ).scalar_one()
+            assert n == 1
+            with pytest.raises(audit.AuditMetadataError):
+                await audit.registrar(s, accion="prueba", metadata={"email": "a@b.c"})
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

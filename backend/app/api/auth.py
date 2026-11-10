@@ -16,7 +16,7 @@ from app.api.deps import (
     sesion_completa,
     verificar_csrf,
 )
-from app.auth import audit, sessions
+from app.auth import audit, membership, sessions
 from app.auth.passwords import hash_password, needs_rehash, verify_dummy, verify_password
 from app.auth.platform import PlatformCrypto
 from app.auth.recovery import hash_code
@@ -53,6 +53,8 @@ class MeOut(BaseModel):
     email: str
     es_operador: bool
     totp_activo: bool
+    clinica_id: UUID | None = None
+    personal_id: UUID | None = None
 
 
 def _claves(
@@ -238,7 +240,75 @@ async def me(
         email=platform.cipher.decrypt(bytes(row.email), platform.ctx("email", data.usuario_id)),
         es_operador=row.es_operador,
         totp_activo=row.totp_activo,
+        clinica_id=data.clinica_id,
+        personal_id=data.personal_id,
     )
+
+
+class ContextoOut(BaseModel):
+    clinica_id: UUID
+    personal_id: UUID
+    rol: str
+    clinica_nombre: str
+
+
+class ContextoIn(BaseModel):
+    personal_id: UUID
+
+
+async def _contextos(db: AsyncSession, usuario_id: UUID) -> list[ContextoOut]:
+    rows = (
+        await db.execute(
+            text(
+                "SELECT clinica_id, personal_id, rol, clinica_nombre FROM clinicas_de_usuario(:u)"
+            ),
+            {"u": usuario_id},
+        )
+    ).all()
+    return [
+        ContextoOut(
+            clinica_id=r.clinica_id,
+            personal_id=r.personal_id,
+            rol=r.rol,
+            clinica_nombre=r.clinica_nombre,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/contextos")
+async def contextos(
+    db: SessionDep, data: Annotated[SessionData, Depends(sesion_completa)]
+) -> list[ContextoOut]:
+    res = await _contextos(db, data.usuario_id)
+    await db.commit()
+    return res
+
+
+@router.post("/contexto", dependencies=[Depends(verificar_csrf)])
+async def elegir_contexto(
+    body: ContextoIn,
+    request: Request,
+    db: SessionDep,
+    data: Annotated[SessionData, Depends(sesion_completa)],
+) -> ContextoOut:
+    disponibles = await _contextos(db, data.usuario_id)
+    elegido = next((c for c in disponibles if c.personal_id == body.personal_id), None)
+    if elegido is None:
+        raise HTTPException(404, "No encontrado")
+    await sessions.asignar_contexto(db, data.id, elegido.clinica_id, elegido.personal_id)
+    await membership.fijar_contexto(db, elegido.clinica_id)  # la auditoría exige el contexto
+    await audit.registrar(
+        db,
+        accion="contexto_elegido",
+        actor_usuario_id=data.usuario_id,
+        entidad="personal",
+        entidad_id=elegido.personal_id,
+        ip=client_ip(request, get_settings()),
+        metadata={"rol": elegido.rol},
+    )
+    await db.commit()
+    return elegido
 
 
 async def _contexto_mfa(

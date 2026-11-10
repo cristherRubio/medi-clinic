@@ -3,13 +3,14 @@
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from app.db.session import clinic_session, make_engine
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -65,7 +66,8 @@ async def env() -> AsyncIterator[Entorno]:
 
 async def _ejecutar(env: Entorno, clinica: UUID, sql: str, params: dict[str, Any]) -> Any:
     async with clinic_session(env.app, clinica) as s:
-        return (await s.execute(text(sql), params)).scalar_one_or_none()
+        resultado = cast("CursorResult[Any]", await s.execute(text(sql), params))
+        return resultado.scalar_one_or_none() if resultado.returns_rows else None
 
 
 async def _id(env: Entorno, clinica: UUID, sql: str, params: dict[str, Any]) -> UUID:
