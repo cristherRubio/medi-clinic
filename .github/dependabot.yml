@@ -1,14 +1,29 @@
 version: 2
 updates:
+  # Un solo PR semanal con todas las dependencias de Python.
   - package-ecosystem: uv
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+
+  # Sin agrupar: un cambio de imagen base se revisa aparte.
+  # Las versiones mayores/menores de Python (3.13 → 3.15) se deciden a mano.
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # Un solo PR semanal con todas las acciones de GitHub.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      acciones:
+        patterns: ["*"]
