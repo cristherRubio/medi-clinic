@@ -27,6 +27,9 @@ class Accion(StrEnum):
     GESTIONAR_SALAS = "gestionar_salas"
     CONFIGURAR_CLINICA = "configurar_clinica"
     BORRAR = "borrar"
+    VER_PERSONAL = "ver_personal"
+    EDITAR_PERSONAL = "editar_personal"
+    VER_SALAS = "ver_salas"
 
 
 _A, _S, _M = Rol.ADMIN, Rol.ASISTENTE, Rol.MEDICO
@@ -46,6 +49,9 @@ MATRIZ: dict[Accion, dict[Rol, Alcance]] = {
     Accion.GESTIONAR_SALAS: {_A: _T},
     Accion.CONFIGURAR_CLINICA: {_A: _T},
     Accion.BORRAR: {_A: _T},
+    Accion.VER_PERSONAL: {_A: _T, _S: _T, _M: _P},
+    Accion.EDITAR_PERSONAL: {_A: _T},
+    Accion.VER_SALAS: {_A: _T, _S: _T, _M: _T},
 }
 
 
