@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-  pull_request:
+    branches: [main]  # se trabaja directo en main (antes de la v1)
+  pull_request:  # PRs de Dependabot (y ramas, si se vuelven a usar)
 
 jobs:
   backend:

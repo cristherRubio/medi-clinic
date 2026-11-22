@@ -9,8 +9,14 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 ## 1. Estado actual (actualizar al cerrar cada paso)
 
 - **Fase 0:** terminada salvo el paso **0.7 (infra real)**, pospuesto hasta tener nombre, dominio y VPS.
+<<<<<<< Updated upstream
 - **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) implementado** en la rama `paso5` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR.
 - **Siguiente:** Fase 1, **paso 6: agenda** (§10).
+=======
+- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
+- **Paso 6 (agenda y configuración de clínica) terminado** (rama `fase1-paso6`, CI en verde y PR fusionado el 2026-11-21). Desde aquí se trabaja directo en `main` (§2).
+- **Siguiente:** Fase 1, **paso 7: auditoría transversal** (§10).
+>>>>>>> Stashed changes
 - **Orden acordado:** backend (Fases 1–2) y frontend (Fase 3) primero, todo probado en local con Docker; después el 0.7 y la Fase 4.
 
 **Pendientes menores:**
@@ -33,7 +39,11 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - **Lee el código antes de cambiarlo.** Antes de cambiar una tabla, política, permiso o función que ya existe, revisa el código y **las pruebas que la usan** (el paso 1 rompió pruebas de auditoría y bootstrap por no hacerlo). No adivines.
 - **Una fase y un paso a la vez.** Al terminar: qué cambió, cómo probarlo y siguiente paso; actualiza §1.
 - **Código y pruebas van juntos.** Si un cambio rompe una prueba existente, corrígela en el mismo cambio. Verifica siempre con `make format && make check` antes de dar algo por terminado. Lo que toca BD solo se valida en CI (§3): dilo explícitamente.
+<<<<<<< Updated upstream
 - **Git:** commits, push y PRs **solo cuando el propietario lo pida**. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot). Los PRs se abren con `gh pr create` (cuando el propietario lo pida).
+=======
+- **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. **Antes de la v1 se trabaja directo en `main`** (sin ramas ni PRs propios, 2026-11-21): el CI corre una vez por push a `main` y en los PRs (Dependabot). Sin compuerta previa, si el CI falla se corrige con el siguiente push; antes de empujar cambios de BD conviene correr las pruebas de BD en local (§5). Los PRs de Dependabot sí necesitan CI en verde antes de fusionar. Al llegar la v1 (o con más gente) se vuelve a ramas + PR.
+>>>>>>> Stashed changes
 - Si algo choca con este documento, **avisa**; no cambies decisiones en silencio. Si una decisión cambia, actualiza este archivo.
 - Nada fuera de alcance (§4) ni dependencias nuevas sin justificarlas en una línea (`uv add`).
 - Todo modular con interfaces: canal de recordatorios, cliente de WhatsApp, proveedor de claves, proveedor de correo, pagos.
@@ -65,7 +75,7 @@ Flujo local completo: `down -v` (solo si se regeneran secretos o roles) → `mak
 
 ## 3. Pruebas
 
-- **Pruebas de BD solo en CI.** `db` está en una red interna de Docker sin puertos al host, así que en local se saltan (`APP_TEST_DB != "1"`) y en CI corren (`APP_TEST_DB=1`, `APP_DB_HOST=localhost`). En local, `make check` muestra muchas *skipped*: es normal. En CI, `tests/db`, `tests/api` y `tests/test_bootstrap.py` deben salir **passed**, no *skipped*. Cada cambio de BD se verifica empujando una rama.
+- **Pruebas de BD solo en CI.** `db` está en una red interna de Docker sin puertos al host, así que en local se saltan (`APP_TEST_DB != "1"`) y en CI corren (`APP_TEST_DB=1`, `APP_DB_HOST=localhost`). En local, `make check` muestra muchas *skipped*: es normal. En CI, `tests/db`, `tests/api` y `tests/test_bootstrap.py` deben salir **passed**, no *skipped*. Cada cambio de BD se verifica en CI tras el push a `main` (o antes, en local; §5).
 - Cada archivo de pruebas de BD lleva `pytestmark` con `pytest.mark.skipif(os.environ.get("APP_TEST_DB") != "1", reason="Pruebas de BD: solo en CI (APP_TEST_DB=1)")` (más `pytest.mark.asyncio` si usa `async`). **Sin `skipif`, el archivo falla en local** por falta de `secrets/db_app_password`.
 - La BD del CI se comparte entre pruebas: cada prueba **limpia solo sus filas** de tablas hijas, con SQL propio y UUID aleatorios. Las clínicas se crean con el motor `operador` (única vía de alta; nadie tiene `DELETE` sobre `clinica`, así que quedan inertes). Las filas de `personal` y `aceptacion_legal` quedan.
 - Sin datos reales en pruebas.
