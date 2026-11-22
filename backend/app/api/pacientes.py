@@ -513,6 +513,17 @@ async def vincular(
 async def eliminar(paciente_id: UUID, request: Request, actor: Borrar, db: SessionDep) -> None:
     """Borrado lógico; los datos se conservan hasta la purga (plazo por definir)."""
     await _visible(db, actor, paciente_id)
+    citas_futuras = (
+        await db.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM evento_agenda WHERE clinica_id = :c "
+                "AND paciente_id = :i AND estado <> 'cancelada' AND upper(rango) > now())"
+            ),
+            {"c": actor.clinica_id, "i": paciente_id},
+        )
+    ).scalar_one()
+    if citas_futuras:
+        raise HTTPException(409, "Tiene citas futuras: cancélalas antes")
     await db.execute(
         text("UPDATE paciente SET eliminado_en = now() WHERE id = :i AND clinica_id = :c"),
         {"i": paciente_id, "c": actor.clinica_id},

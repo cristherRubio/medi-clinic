@@ -9,15 +9,16 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 ## 1. Estado actual (actualizar al cerrar cada paso)
 
 - **Fase 0:** terminada salvo el paso **0.7 (infra real)**, pospuesto hasta tener nombre, dominio y VPS.
-- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) implementado** en la rama `paso5` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR.
-- **Siguiente:** Fase 1, **paso 6: agenda** (§10).
+- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
+- **Paso 6 (agenda y configuración de clínica) implementado** en la rama `fase1-paso6` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR (los hace el propietario).
+- **Siguiente:** Fase 1, **paso 7: auditoría transversal** (§10).
 - **Orden acordado:** backend (Fases 1–2) y frontend (Fase 3) primero, todo probado en local con Docker; después el 0.7 y la Fase 4.
 
 **Pendientes menores:**
 1. Prueba de "sin datos personales en logs" en los endpoints de auth (paso 0.5; sigue pendiente).
 2. Invitaciones entregadas a mano: el token se devuelve una sola vez y quien invita manda el enlace. Pasar a correo automático en el paso 9.
 3. Suspender una clínica borra sus sesiones, pero su personal todavía puede iniciar sesión (y `GET /api/auth/contextos` devuelve la lista vacía). Decidir si el login mismo debe fallar.
-4. Desactivar personal no cancela sus citas ni mueve sus pacientes: se decide en el paso 6.
+4. Desactivar a un médico con citas futuras da 409 (paso 6); sus vínculos con pacientes se conservan.
 5. Dependabot ya agrupa `uv` y `github-actions` (un PR semanal por ecosistema) e ignora saltos de versión de Python en la imagen (PR #17). Quedan ramas viejas de Dependabot sin PR en `origin`; se pueden borrar.
 6. Subir de Python 3.13 es decisión manual: exige alinear `Dockerfile`, `.python-version`, `pyproject.toml` y CI.
 7. `apt-get install --only-upgrade zlib1g` en el `Dockerfile` es un parche temporal por Trivy: quitarlo cuando `python:3.13-slim` traiga la versión corregida.
@@ -33,7 +34,7 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - **Lee el código antes de cambiarlo.** Antes de cambiar una tabla, política, permiso o función que ya existe, revisa el código y **las pruebas que la usan** (el paso 1 rompió pruebas de auditoría y bootstrap por no hacerlo). No adivines.
 - **Una fase y un paso a la vez.** Al terminar: qué cambió, cómo probarlo y siguiente paso; actualiza §1.
 - **Código y pruebas van juntos.** Si un cambio rompe una prueba existente, corrígela en el mismo cambio. Verifica siempre con `make format && make check` antes de dar algo por terminado. Lo que toca BD solo se valida en CI (§3): dilo explícitamente.
-- **Git:** commits, push y PRs **solo cuando el propietario lo pida**. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot). Los PRs se abren con `gh pr create` (cuando el propietario lo pida).
+- **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot).
 - Si algo choca con este documento, **avisa**; no cambies decisiones en silencio. Si una decisión cambia, actualiza este archivo.
 - Nada fuera de alcance (§4) ni dependencias nuevas sin justificarlas en una línea (`uv add`).
 - Todo modular con interfaces: canal de recordatorios, cliente de WhatsApp, proveedor de claves, proveedor de correo, pagos.
@@ -106,12 +107,13 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 
 **Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2 **async** + psycopg 3, Alembic (SQL explícito, `target_metadata = None`), argon2-cffi, pyotp, cryptography, pydantic-settings. Pruebas: pytest + pytest-asyncio + `starlette.testclient.TestClient` (paquete `httpx2` en dev).
 
-- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72). `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, auth, operator, pacientes, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
+- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72). `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, agenda, auth, clinica, operator, pacientes, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
 - `app/crypto/`: `keys.py` (`KeyProvider`, `FileKeyProvider`), `envelope.py` (`generate_dek`, `wrap_dek(provider, dek, contexto)`, `unwrap_dek`, `rewrap_dek`), `fields.py` (`FieldCipher`, `FieldContext(tabla, columna, clinica_id, fila_id)`), `blind_index.py` (`blind_index`, `normalize_email`), `errors.py`.
 - `app/db/session.py`: `make_engine(rol)`, `clinic_session(engine, clinica_id)`.
 - `app/auth/`: `passwords`, `totp`, `totp_replay` (`consumir_paso`), `recovery`, `tokens` (`new_token`, `hash_token`), `throttle`, `audit` (`registrar`; rechaza claves de metadata con pinta de dato personal; sin `clinica_id` toma el de `app.clinica_id`), `sessions` (`SessionData` con `clinica_id` y `personal_id`; `crear`, `buscar`, `asignar_contexto`, `borrar`), `platform` (`PlatformCrypto`: `cipher`, `ctx`, `email_idx`, `throttle_key`, `csrf_key`; `load_platform_crypto`), `membership` (`fijar_contexto`, `cargar_cipher`, `crear_personal`, `registrar_aceptacion`), `rbac` (`Rol`, `Alcance`, `Accion`, `MATRIZ`, `alcance(rol, accion)`).
+- `app/horario.py`: `validar_zona`/`ZonaHoraria`, modelo `Horario` (tramos por día, `24:00` como fin, sin traslapes; todos vacíos = sin restricción) con `dentro(inicio, fin, zona)`, `cargar_horario`, `a_utc` (fecha sin zona = hora de la clínica).
 - `app/telefono.py`: `normalizar_e164` (México `+52` por defecto; acepta `52…`, `521…` y otros `+código…`); `PlatformCrypto.telefono_idx` normaliza y usa la clave de plataforma.
-- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`.
+- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`, `clinica.py` (configuración), `agenda.py`.
 - `app/scripts/bootstrap_platform.py`: DEK de plataforma + primer operador (corre con `migrador`).
 - **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`. **Siguiente: 0007.**
 - **Infra:** `infra/docker-compose.yml` (`db`, `api`; `migrate` y `bootstrap` con perfil `tools`), `infra/db/` (`init-roles.sh`, `roles.sql`), `infra/scripts/gen-local-secrets.sh`. Dockerfile de una etapa sobre `python:3.13-slim`: parche de `zlib1g`, sin `pip`, usuario `app` 10001, sistema de archivos de solo lectura. `frontend/` vacío.
@@ -145,10 +147,10 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 | Agregar asistentes | no | sí | no | no |
 | Ver personal | no | todos | todos | solo a sí mismo |
 | Editar personal (nombre, contacto) | no | cualquiera | solo lo suyo | solo lo suyo |
-| Ver salas | no | sí | sí | sí |
+| Ver salas y la configuración de la clínica | no | sí | sí | sí |
 | Crear/editar salas | no | sí | no | no |
 | Configurar clínica (texto manual, política, mapa, horario) | no | sí | no | no |
-| Borrar y restaurar (pacientes, citas) y desactivar/reactivar personal | no | sí | no | no |
+| Borrar y restaurar pacientes; desactivar/reactivar personal (las citas **nunca se borran**, solo se cancelan) | no | sí | no | no |
 
 La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Alcance`, `todos|propios`; rol ausente = sin permiso; el operador no figura). Acciones nuevas se agregan ahí, nunca con `if rol == ...`. Un médico solo ve pacientes vinculados a él (`paciente_medico`).
 
@@ -222,6 +224,16 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
   - `PATCH /{id}` (`EDITAR_PACIENTE`): cambiar el teléfono exige `telefono_confirmado: true` y, si el número normalizado cambia, reinicia el opt-in.
   - `POST /{id}/autorizacion {autorizado}` (`MARCAR_OPTIN`; desmarcar → `sin_solicitar`), `POST /{id}/reactivar-recordatorios` (solo desde `rechazado`; 409 si no; gancho de `baja_whatsapp` para la Fase 2), `PUT /{id}/medicos` (reemplaza la lista; ≥ 1 médico activo), `DELETE /{id}` y `POST /{id}/restaurar` (admin).
   - Médico: paciente no vinculado = 404 en lectura y mutaciones. Auditoría: `paciente_creado|editado|autorizacion|vinculado|eliminado|restaurado`, `recordatorios_reactivados`.
+- **Configuración de clínica (paso 6):** `GET /api/clinica` (todo el personal; `VER_CLINICA`), `PATCH /api/clinica` (admin; `CONFIGURAR_CLINICA`): `nombre`, `zona_horaria` (IANA), `google_maps_url` (solo `https://`), `politica_cancelacion` (≤ 500), `plantilla_recordatorio` (≤ 1000), `horario_laboral` (`{"lun": [["09:00","14:00"], ...], ..., "dom": []}`). `null` o `""` borra los textos opcionales.
+- **Agenda (paso 6):**
+  - `GET /api/agenda?desde&hasta` (≤ 62 días; filtros `medico_id`, `sala_id`, `paciente_id`, `incluir_canceladas`); el médico solo ve su agenda. Fechas sin zona = hora de la clínica; se guardan y devuelven en UTC.
+  - `POST /api/agenda`: bloqueos con `BLOQUEAR_AGENDA`, lo demás con `GESTIONAR_CITAS` (médico: solo su agenda y sus pacientes). Valida médico activo, sala activa, paciente activo y visible, 15 min a 12 h (bloqueo hasta 31 días), comentario ≤ 500 (cifrado). Doble reserva → **409** (exclusiones de la BD). Estado inicial: `pendiente_envio` (consulta/procedimiento) o `confirmada`. Citas en el pasado permitidas.
+  - Con horario laboral configurado, consulta/procedimiento/otra fuera de horario → 422 salvo `fuera_de_horario: true` (auditado). Los bloqueos no se restringen.
+  - Agendar o mover a un paciente no vinculado al médico lo **vincula automáticamente** (auditado como `vinculo_automatico`).
+  - `PATCH /{id}`: mover (horario, médico, sala), **cambiar de paciente** o editar el comentario; el tipo no cambia. Si cambia horario, médico o paciente de una cita `enviado`/`confirmada`, vuelve a `pendiente_envio` (`reprogramado`). Evento cancelado → 409. Guarda `actualizado_por/en`.
+  - `POST /{id}/cancelar` (`cancelada_por = personal`; ya cancelado → 409). No hay `DELETE`.
+  - `GET /{id}/historial`: para la UI; desde `auditoria` (quién, cuándo, campos, paciente anterior/nuevo con nombre descifrado al leer, `fuera_de_horario`, `reprogramado`). La metadata solo guarda ids.
+  - Desactivar a un médico con citas futuras no canceladas (sin contar bloqueos) → 409; borrar un paciente con citas futuras → 409.
 - **Cabeceras:** CSP estricta, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`. Frontend sin scripts de terceros, sin analítica, sin datos personales en `localStorage`/`sessionStorage`/URLs.
 - **Secretos como archivos** en `./secrets/` (carpeta 700; archivos 644 solo en desarrollo local, porque el uid 10001 del contenedor debe leerlos; ignorados por git). Nunca en variables de entorno; sin `.env.example`. Existen: `db_password`, `db_migrador_password`, `db_app_password`, `db_operador_password`, `kek_v1`, `resend_api_key`. Fase 2: `meta_access_token`, `meta_app_secret`, `meta_verify_token`.
 - **Rotación de KEK:** invalida las claves derivadas (contadores y CSRF); los usuarios vuelven a entrar. Va al runbook.
@@ -281,7 +293,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
    7. Visibilidad: admin y asistente, todos; médico, solo vinculados.
    8. Búsqueda por nombre en memoria.
    9. Auditoría en cada mutación. Pruebas: IDOR, visibilidad por rol, teléfono sin confirmar, cambio de teléfono, nombre solo con espacios, BD solo con texto cifrado.
-6. **Agenda (siguiente):** crear, mover y cancelar; bloqueos; tipos; exclusiones; estados; comentarios. Decidir qué pasa con las citas de personal desactivado.
+6. ✅ **Agenda** (crear, mover, cambiar paciente, cancelar; bloqueos; horario con `fuera_de_horario`; historial; prueba de concurrencia) y **configuración de clínica** (`/api/clinica`). Sin migración; acción nueva `VER_CLINICA`.
 7. Auditoría en toda mutación (revisión transversal).
 8. Scripts de rotación por lotes (reenvolver DEKs, recifrar).
 9. Recuperación de contraseña (sin revelar si la cuenta existe) y envío automático de invitaciones, con `EmailProvider`.
@@ -315,9 +327,8 @@ Completar 0.7; prueba real de WhatsApp; revisión de seguridad (OWASP ASVS selec
 | Tema | Por defecto |
 |---|---|
 | Login de personal de clínica suspendida | Hoy entra sin contextos; decidir si debe fallar |
-| Citas de personal desactivado | Se decide en el paso 6 |
 | Baja global en clínicas sin WhatsApp (lista manual) | Por decidir |
-| Horario del médico | Bloqueos puntuales dentro del horario de la clínica; un bloqueo de varios días es un solo evento |
+| Horario del médico | Bloqueos puntuales; un bloqueo de varios días es un solo evento. El horario laboral es de la clínica (no por médico) |
 | Retención de pacientes y citas | Borrado lógico y purga configurable (plazo por definir) |
 | Hora de envío automático | Día anterior 10:00 hora de la clínica; tardías: inmediato si faltan > 2 h |
 | Cobro de mensajes de WhatsApp | Propuesta: costo de Meta + 30 %, o paquete incluido |
@@ -329,6 +340,8 @@ Completar 0.7; prueba real de WhatsApp; revisión de seguridad (OWASP ASVS selec
 | VPS | 2 vCPU / 4 GB, Ubuntu 24.04 LTS |
 | Respaldos | Cloudflare R2 o Backblaze B2 |
 | Librería de calendario | Elegir tras revisar licencias |
+
+**Decididas en el paso 6 (2026-11-21):** fechas sin zona en la zona de la clínica; horario laboral configurable por el admin y aplicado con `fuera_de_horario` como excepción auditada; se puede cambiar el paciente de una cita con historial visible en la UI; las citas nunca se borran (solo se cancelan); desactivar médico o borrar paciente con citas futuras → 409; agendar a un paciente no vinculado lo vincula; citas en el pasado permitidas.
 
 **Decididas para el paso 5 (2026-11-20):** admin o asistente deben vincular al menos un médico al crear un paciente (si lo crea un médico, queda vinculado a sí mismo); la casilla de autorización se puede desmarcar y vuelve a `sin_solicitar`; el borrado lógico de pacientes lo hace y lo ve solo el admin; la normalización E.164 (México `+52`) se adelanta al paso 5.
 
