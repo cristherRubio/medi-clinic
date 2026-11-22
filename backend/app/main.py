@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.api.activation import router as activation_router
 from app.api.agenda import router as agenda_router
@@ -22,6 +24,16 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if es_local else None,
     )
     add_security_headers(app, es_local)
+
+    @app.exception_handler(RequestValidationError)
+    async def validacion(_: Request, exc: RequestValidationError) -> JSONResponse:
+        """422 sin `input` ni `ctx`: no devolver lo que se envió (contraseñas, teléfonos...)."""
+        detalle = [
+            {"type": e.get("type"), "loc": list(e.get("loc", ())), "msg": e.get("msg")}
+            for e in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": detalle})
+
     app.include_router(activation_router)
     app.include_router(agenda_router)
     app.include_router(auth_router)

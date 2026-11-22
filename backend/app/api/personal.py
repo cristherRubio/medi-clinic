@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.authz import Actor, requerir
+from app.api.authz import Actor, denegar, requerir
 from app.api.deps import PlatformDep, SessionDep, client_ip, get_key_provider
 from app.auth import audit, membership
 from app.auth.rbac import Accion, Alcance, alcance
@@ -150,7 +150,7 @@ async def editar(
     if not cambios or ("nombre" in cambios and body.nombre is None):
         raise HTTPException(422, "Cambios inválidos")
     if personal_id != actor.personal_id and alcance(actor.rol, Accion.EDITAR_PERSONAL) is None:
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, Accion.EDITAR_PERSONAL)
     objetivo = await _objetivo(db, actor.clinica_id, personal_id)
     if "contacto_preferido" in cambios and objetivo.rol != "medico":
         raise HTTPException(422, "El contacto preferido es solo para médicos")
@@ -275,7 +275,7 @@ async def invitar(
     body: InvitarIn, request: Request, actor: AgregarMedicos, db: SessionDep, platform: PlatformDep
 ) -> InvitacionCreada:
     if body.rol == "asistente" and alcance(actor.rol, Accion.AGREGAR_ASISTENTES) is None:
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, Accion.AGREGAR_ASISTENTES)
     settings = get_settings()
     cid = actor.clinica_id
     email = body.email.strip()
@@ -348,10 +348,10 @@ async def invitar(
 
 @router.get("/invitaciones")
 async def listar_invitaciones(
-    actor: VerPersonal, db: SessionDep, platform: PlatformDep
+    request: Request, actor: VerPersonal, db: SessionDep, platform: PlatformDep
 ) -> list[InvitacionPendiente]:
     if actor.alcance is not Alcance.TODOS:
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, "ver_invitaciones")
     rows = (
         await db.execute(
             text(
@@ -392,7 +392,7 @@ async def revocar_invitacion(
     if row is None:
         raise HTTPException(404, NO_ENCONTRADO)
     if row.rol == "asistente" and alcance(actor.rol, Accion.AGREGAR_ASISTENTES) is None:
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, Accion.AGREGAR_ASISTENTES)
     await db.execute(
         text(
             "UPDATE invitacion SET expira_en = now() - interval '1 second' "

@@ -2,16 +2,18 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, NoReturn
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import PlatformDep, SessionDep, sesion_completa, verificar_csrf
-from app.auth import membership
+from app.api.deps import PlatformDep, SessionDep, client_ip, sesion_completa, verificar_csrf
+from app.auth import audit, membership
 from app.auth.rbac import Accion, Alcance, Rol, alcance
 from app.auth.sessions import SessionData
+from app.config import get_settings
 
 _METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
 
@@ -23,6 +25,25 @@ class Actor:
     clinica_id: UUID
     rol: Rol
     alcance: Alcance
+
+
+async def denegar(
+    db: AsyncSession, request: Request, usuario_id: UUID, accion: Accion | str
+) -> NoReturn:
+    """403 auditado (`acceso_denegado`). Requiere el contexto de clínica fijado.
+
+    Hace commit antes de responder para que el registro sobreviva al error; llámalo antes
+    de cualquier escritura del endpoint.
+    """
+    await audit.registrar(
+        db,
+        accion="acceso_denegado",
+        actor_usuario_id=usuario_id,
+        ip=client_ip(request, get_settings()),
+        metadata={"accion": str(accion), "metodo": request.method, "ruta": request.url.path},
+    )
+    await db.commit()
+    raise HTTPException(403, "Sin permiso")
 
 
 def requerir(accion: Accion) -> Callable[..., Awaitable[Actor]]:
@@ -59,7 +80,7 @@ def requerir(accion: Accion) -> Callable[..., Awaitable[Actor]]:
         rol = Rol(row.rol)
         permitido = alcance(rol, accion)
         if permitido is None:
-            raise HTTPException(403, "Sin permiso")
+            await denegar(db, request, data.usuario_id, accion)
         return Actor(data.usuario_id, data.personal_id, data.clinica_id, rol, permitido)
 
     return dependencia

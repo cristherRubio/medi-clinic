@@ -15,7 +15,7 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.authz import Actor, requerir
+from app.api.authz import Actor, denegar, requerir
 from app.api.deps import PlatformDep, SessionDep, client_ip, get_key_provider
 from app.auth import audit, membership
 from app.auth.rbac import Accion, Alcance, alcance
@@ -263,7 +263,7 @@ async def crear(
     cid = actor.clinica_id
     if alcance(actor.rol, Accion.VINCULAR_PACIENTES) is None:
         if set(body.medicos) - {actor.personal_id}:
-            raise HTTPException(403, "Sin permiso")
+            await denegar(db, request, actor.usuario_id, Accion.VINCULAR_PACIENTES)
         medicos = [actor.personal_id]
     else:
         medicos = await _validar_medicos(db, cid, body.medicos)
@@ -297,11 +297,15 @@ async def crear(
 
 @router.get("")
 async def listar(
-    actor: VerPacientes, db: SessionDep, provider: ProviderDep, eliminados: bool = False
+    request: Request,
+    actor: VerPacientes,
+    db: SessionDep,
+    provider: ProviderDep,
+    eliminados: bool = False,
 ) -> list[PacienteOut]:
     """`?eliminados=true` lista solo los borrados (solo admin)."""
     if eliminados and alcance(actor.rol, Accion.BORRAR) is None:
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, Accion.BORRAR)
     rows = await _consultar(db, actor, modo="eliminados" if eliminados else "activos")
     cipher = await membership.cargar_cipher(db, provider, actor.clinica_id)
     salida = [_salida(cipher, actor.clinica_id, r) for r in rows]

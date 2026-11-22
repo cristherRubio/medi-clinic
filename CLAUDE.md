@@ -16,7 +16,8 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 =======
 - **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
 - **Paso 6 (agenda y configuración de clínica) terminado** (rama `fase1-paso6`, CI en verde y PR fusionado el 2026-11-21). Desde aquí se trabaja directo en `main` (§2).
-- **Siguiente:** Fase 1, **paso 7: auditoría transversal** (§10).
+- **Paso 7 (auditoría transversal) implementado** en `main` sin empujar (2026-11-21): `make check-db` en verde; falta el push del propietario y el CI.
+- **Siguiente:** Fase 1, **paso 8: scripts de rotación por lotes** (§10).
 >>>>>>> Stashed changes
 =======
 - **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
@@ -26,7 +27,7 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - **Orden acordado:** backend (Fases 1–2) y frontend (Fase 3) primero, todo probado en local con Docker; después el 0.7 y la Fase 4.
 
 **Pendientes menores:**
-1. Prueba de "sin datos personales en logs" en los endpoints de auth (paso 0.5; sigue pendiente).
+1. ~~Prueba de "sin datos personales en logs"~~: hecha en el paso 7 (`tests/api/test_auditoria.py`).
 2. Invitaciones entregadas a mano: el token se devuelve una sola vez y quien invita manda el enlace. Pasar a correo automático en el paso 9.
 3. Suspender una clínica borra sus sesiones, pero su personal todavía puede iniciar sesión (y `GET /api/auth/contextos` devuelve la lista vacía). Decidir si el login mismo debe fallar.
 4. Desactivar a un médico con citas futuras da 409 (paso 6); sus vínculos con pacientes se conservan.
@@ -44,12 +45,12 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - **Antes de programar:** discute requisitos y diseño y confirma el plan en 5–10 líneas. Una vez acordado, **edita, crea y borra archivos directamente**: el propietario no revisa el diff si el diseño se discutió a fondo. Por eso el diseño se cierra **antes** de tocar código.
 - **Lee el código antes de cambiarlo.** Antes de cambiar una tabla, política, permiso o función que ya existe, revisa el código y **las pruebas que la usan** (el paso 1 rompió pruebas de auditoría y bootstrap por no hacerlo). No adivines.
 - **Una fase y un paso a la vez.** Al terminar: qué cambió, cómo probarlo y siguiente paso; actualiza §1.
-- **Código y pruebas van juntos.** Si un cambio rompe una prueba existente, corrígela en el mismo cambio. Verifica siempre con `make format && make check` antes de dar algo por terminado. Lo que toca BD solo se valida en CI (§3): dilo explícitamente.
+- **Código y pruebas van juntos.** Si un cambio rompe una prueba existente, corrígela en el mismo cambio. Verifica siempre con `make format && make check` antes de dar algo por terminado. Lo que toca BD se valida con `make check-db` (y luego en CI, §3): dilo explícitamente.
 <<<<<<< HEAD
 <<<<<<< Updated upstream
 - **Git:** commits, push y PRs **solo cuando el propietario lo pida**. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot). Los PRs se abren con `gh pr create` (cuando el propietario lo pida).
 =======
-- **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. **Antes de la v1 se trabaja directo en `main`** (sin ramas ni PRs propios, 2026-11-21): el CI corre una vez por push a `main` y en los PRs (Dependabot). Sin compuerta previa, si el CI falla se corrige con el siguiente push; antes de empujar cambios de BD conviene correr las pruebas de BD en local (§5). Los PRs de Dependabot sí necesitan CI en verde antes de fusionar. Al llegar la v1 (o con más gente) se vuelve a ramas + PR.
+- **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. **Antes de la v1 se trabaja directo en `main`** (sin ramas ni PRs propios, 2026-11-21): el CI corre una vez por push a `main` y en los PRs (Dependabot). Sin compuerta previa, si el CI falla se corrige con el siguiente push; antes de empujar cambios de BD, `make check-db`. Los PRs de Dependabot sí necesitan CI en verde antes de fusionar. Al llegar la v1 (o con más gente) se vuelve a ramas + PR.
 >>>>>>> Stashed changes
 =======
 - **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot).
@@ -62,7 +63,7 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - Entorno del propietario: Ubuntu, repo en `~/Documents/personal/medi-clinic`, puerto 8000 libre.
 
 ### Reglas de código (aprendidas; no negociables)
-- **Una migración ya fusionada nunca se edita.** Las correcciones van en una migración nueva. La siguiente es la **0007**.
+- **Una migración ya fusionada nunca se edita.** Las correcciones van en una migración nueva. La siguiente es la **0008**.
 - **Sin SQL armado con f-strings ni `# noqa: S608`.** Consultas de texto fijo con parámetros; los `UPDATE` parciales usan `CASE WHEN :bandera THEN :valor ELSE columna END`. No se silencian alertas de seguridad de ruff. (Las migraciones sí componen DDL con constantes propias, como `CID`.)
 - **Textos de entrada con `StringConstraints(strip_whitespace=True, min_length=1, ...)`**, no solo `Field(min_length=1)`: un texto de solo espacios debe dar 422, no 500 ni un valor vacío guardado.
 - mypy estricto: en pruebas, los resultados de `execute` se tipan con `cast("CursorResult[Any]", ...)` o ayudantes tipados.
@@ -73,6 +74,8 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 | Comando | Qué hace |
 |---|---|
 | `make check` | ruff (lint + formato) + pytest + mypy estricto; lo mismo que el CI |
+| `make check-db` | todas las pruebas, **incluidas las de BD**, contra un Postgres 16 temporal (se borra al terminar); correrlo antes de empujar cambios de BD. `ARGS="ruta -x"` y `PUERTO=` opcionales |
+| `make auditoria` | últimos eventos de auditoría de la BD local (`N=50`), como superusuario de Postgres |
 | `make format` | formatea y corrige con ruff |
 | `make up` / `make down` | levanta (reconstruyendo) / apaga `db` + `api` |
 | `make migrate` | `alembic upgrade head` con el rol `migrador` |
@@ -85,11 +88,12 @@ Flujo local completo: `down -v` (solo si se regeneran secretos o roles) → `mak
 
 ## 3. Pruebas
 
-- **Pruebas de BD solo en CI.** `db` está en una red interna de Docker sin puertos al host, así que en local se saltan (`APP_TEST_DB != "1"`) y en CI corren (`APP_TEST_DB=1`, `APP_DB_HOST=localhost`). En local, `make check` muestra muchas *skipped*: es normal. En CI, `tests/db`, `tests/api` y `tests/test_bootstrap.py` deben salir **passed**, no *skipped*. Cada cambio de BD se verifica en CI tras el push a `main` (o antes, en local; §5).
+- **Pruebas de BD: en CI y con `make check-db`.** `db` (la de `make up`) está en una red interna de Docker sin puertos al host, así que `make check` las salta (`APP_TEST_DB != "1"`) y en CI corren (`APP_TEST_DB=1`, `APP_DB_HOST=localhost`). En local, `make check` muestra muchas *skipped*: es normal. En CI, `tests/db`, `tests/api` y `tests/test_bootstrap.py` deben salir **passed**, no *skipped*. Cada cambio de BD se verifica en CI tras el push a `main` (o antes, en local, con `make check-db`).
 - Cada archivo de pruebas de BD lleva `pytestmark` con `pytest.mark.skipif(os.environ.get("APP_TEST_DB") != "1", reason="Pruebas de BD: solo en CI (APP_TEST_DB=1)")` (más `pytest.mark.asyncio` si usa `async`). **Sin `skipif`, el archivo falla en local** por falta de `secrets/db_app_password`.
 - La BD del CI se comparte entre pruebas: cada prueba **limpia solo sus filas** de tablas hijas, con SQL propio y UUID aleatorios. Las clínicas se crean con el motor `operador` (única vía de alta; nadie tiene `DELETE` sobre `clinica`, así que quedan inertes). Las filas de `personal` y `aceptacion_legal` quedan.
 - Sin datos reales en pruebas.
 - **`tests/api/conftest.py`:** fixtures `client`, `otro_client` (segundo cliente con cookies propias, p. ej. operador + admin a la vez), `engine`, `platform`, `provider` (KEK en memoria); ayudantes `crear_usuario`, `crear_clinica`, `crear_invitacion_completa`, `crear_invitacion`, `crear_personal(engine, provider, cid, uid, rol, nombre)`, `crear_equipo(engine, platform, provider, *roles)` → `(cid, [Miembro(uid, pid, email)])`, `como(c, engine, platform, cid, miembro)` → abre sesión de ese miembro en el cliente `c` y devuelve `{"X-CSRF-Token": ...}`. Se importan con `from .conftest import ...`.
+- **`tests/test_auditoria_cobertura.py`** (sin BD) tiene, escrita a mano, la tabla `GRUPOS` de **toda ruta que modifica** → acción de auditoría, y falla si falta alguna ruta de la app (`EXENTAS` para las de solo lectura, con motivo). `tests/api/test_auditoria.py` ejecuta cada ruta y comprueba el registro (leyendo como `migrador`), los 403 auditados y que logs y auditoría no lleven datos personales. **Al agregar un endpoint que modifica, agrégalo a `GRUPOS` y a su escenario.**
 - `tests/test_rbac.py` compara la matriz contra una tabla **escrita aparte** (no leída de `MATRIZ`, para que no sea circular). Al añadir una `Accion`, añade su fila ahí (si no, `test_todas_las_acciones_cubiertas` falla).
 - `tests/api/test_authz.py` monta un endpoint de prueba `/_t/*` solo en las pruebas.
 - Pruebas obligatorias en cada recurso de clínica: IDOR entre clínicas (404), visibilidad por rol (incluido alcance `propios`), y que la BD guarde solo texto cifrado en los campos 🔒.
@@ -132,19 +136,20 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 - `app/auth/`: `passwords`, `totp`, `totp_replay` (`consumir_paso`), `recovery`, `tokens` (`new_token`, `hash_token`), `throttle`, `audit` (`registrar`; rechaza claves de metadata con pinta de dato personal; sin `clinica_id` toma el de `app.clinica_id`), `sessions` (`SessionData` con `clinica_id` y `personal_id`; `crear`, `buscar`, `asignar_contexto`, `borrar`), `platform` (`PlatformCrypto`: `cipher`, `ctx`, `email_idx`, `throttle_key`, `csrf_key`; `load_platform_crypto`), `membership` (`fijar_contexto`, `cargar_cipher`, `crear_personal`, `registrar_aceptacion`), `rbac` (`Rol`, `Alcance`, `Accion`, `MATRIZ`, `alcance(rol, accion)`).
 - `app/horario.py`: `validar_zona`/`ZonaHoraria`, modelo `Horario` (tramos por día, `24:00` como fin, sin traslapes; todos vacíos = sin restricción) con `dentro(inicio, fin, zona)`, `cargar_horario`, `a_utc` (fecha sin zona = hora de la clínica).
 - `app/telefono.py`: `normalizar_e164` (México `+52` por defecto; acepta `52…`, `521…` y otros `+código…`); `PlatformCrypto.telefono_idx` normaliza y usa la clave de plataforma.
-- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`, `clinica.py` (configuración), `agenda.py`.
+- `app/main.py` también instala un manejador de 422 que **no devuelve `input` ni `ctx`** (solo `type`, `loc`, `msg`). `make_engine` usa `hide_parameters=True` (los errores de SQL no llevan parámetros a trazas ni logs).
+- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`, `denegar(db, request, usuario_id, accion)`: 403 auditado), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`, `clinica.py` (configuración), `agenda.py`.
 - `app/scripts/bootstrap_platform.py`: DEK de plataforma + primer operador (corre con `migrador`).
-- **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`. **Siguiente: 0007.**
+- **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`; 0007 `migrador` lee `auditoria` (política `migrador_lee`). **Siguiente: 0008.**
 - **Infra:** `infra/docker-compose.yml` (`db`, `api`; `migrate` y `bootstrap` con perfil `tools`), `infra/db/` (`init-roles.sh`, `roles.sql`), `infra/scripts/gen-local-secrets.sh`. Dockerfile de una etapa sobre `python:3.13-slim`: parche de `zlib1g`, sin `pip`, usuario `app` 10001, sistema de archivos de solo lectura. `frontend/` vacío.
-- **Pruebas de BD en local (opcional):** contenedor temporal `postgres:16` publicado en `127.0.0.1:55432`, `infra/db/init-roles.sh` (con `PGHOST/PGPORT/PGPASSWORD/POSTGRES_USER/POSTGRES_DB/SECRETS_DIR/ROLES_SQL`), `alembic upgrade head` y `pytest` con `APP_TEST_DB=1 APP_DB_HOST=127.0.0.1 APP_DB_PORT=55432 APP_SECRETS_DIR=../secrets`. No sustituye al CI.
+- **Pruebas de BD en local:** `make check-db` (`infra/scripts/check-db.sh`): contenedor temporal `postgres:16` en `127.0.0.1:55432`, roles, migraciones y `pytest` con `APP_TEST_DB=1`. No sustituye al CI.
 - **CI** (`.github/workflows/ci.yml`; `dependabot.yml` vive en `.github/`, no en `workflows/`): job `backend` (Postgres 16, roles, migraciones, `make check`, `pip-audit` de producción), `secretos` (gitleaks por `docker run`, historial completo), `imagen` (build + Trivy por `docker run aquasec/trivy`, `--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1`; **no se usa `trivy-action`**). Si Trivy falla por la imagen base con parche disponible, se actualiza ese paquete en el Dockerfile. En la Fase 3 se añaden `eslint`, `tsc` y `npm audit`.
 
 ### Patrón de un endpoint de clínica
 1. `actor: Annotated[Actor, Depends(requerir(Accion.X))]`. Exige sesión completa (con TOTP) y **CSRF en métodos que modifican**; fija `app.clinica_id`; **lee el rol de `personal` en cada petición** (desactivar o cambiar a alguien surte efecto al instante).
-2. Respuestas: **401** sin sesión o con sesión intermedia; **404 uniforme** sin contexto de clínica (operador o sin elegir), personal inexistente, ajeno o inactivo, clínica suspendida o recurso de otra clínica; **403** si el rol no tiene permiso para la acción.
+2. Respuestas: **401** sin sesión o con sesión intermedia; **404 uniforme** sin contexto de clínica (operador o sin elegir), personal inexistente, ajeno o inactivo, clínica suspendida o recurso de otra clínica; **403** si el rol no tiene permiso para la acción, **siempre con `authz.denegar`** (registra `acceso_denegado` con la acción, método y ruta, y hace commit), nunca con `HTTPException(403)` directo. Llamarlo antes de cualquier escritura.
 3. Toda consulta filtra por `clinica_id` aunque RLS lo haga (segunda barrera). Con alcance `PROPIOS`, filtra además por `actor.personal_id` (el endpoint lo aplica).
 4. Cifrar/descifrar con `membership.cargar_cipher` (requiere el contexto fijado).
-5. `audit.registrar` en toda mutación, sin datos personales en la metadata.
+5. `audit.registrar` en toda mutación, sin datos personales en la metadata (solo ids, nombres de campos y banderas). Convención: `entidad` = tabla, `entidad_id` = fila, acción en participio (`paciente_creado`). Las lecturas no se auditan (decisión del paso 7).
 6. **Commit explícito, también en lecturas** (persiste `ultimo_uso` de la sesión). **Tras un commit se pierde el contexto RLS:** si se vuelve a consultar, llamar otra vez a `membership.fijar_contexto`.
 
 ---
@@ -183,7 +188,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 - **`migrador`:** dueño de las tablas, **sin `BYPASSRLS`**; migraciones y bootstrap. La API nunca recibe su secreto.
 - **`app`:** conexión del backend para el personal; CRUD sin ser dueño (para que RLS aplique). Por defecto recibe CRUD de lo que crea `migrador`; las migraciones recortan con `REVOKE`.
 - **`operador`:** sin permisos por defecto; los recibe por tabla en migraciones. Tiene `SELECT, INSERT, UPDATE` en `clinica`, `usuario` e `invitacion`; `SELECT` en `llave_plataforma`; `INSERT` en `auditoria`; `DELETE` y `SELECT (clinica_id)` en `sesion`. **Nunca** ve tokens ni `usuario_id` de sesión, y **ningún permiso** sobre personal, pacientes, citas ni salas (hay prueba).
-- **`FORCE ROW LEVEL SECURITY` también afecta al dueño:** todo rol que lea o escriba una tabla con RLS necesita política propia. `migrador` tiene inserción en `auditoria` y lectura en `clinica` y `personal`; `operador` tiene política total en `clinica` e inserción en `auditoria`.
+- **`FORCE ROW LEVEL SECURITY` también afecta al dueño:** todo rol que lea o escriba una tabla con RLS necesita política propia. `migrador` tiene inserción **y lectura** en `auditoria` (0007) y lectura en `clinica` y `personal`; `operador` tiene política total en `clinica` e inserción en `auditoria`.
 - Toda tabla de clínica: `clinica_id uuid NOT NULL DEFAULT nullif(current_setting('app.clinica_id', true), '')::uuid` con FK a `clinica`, y política `aislamiento_clinica` para `app` (USING y WITH CHECK).
 - `app` no crea ni borra clínicas; lee la suya y actualiza solo `nombre, zona_horaria, google_maps_url, politica_cancelacion, plantilla_recordatorio, horario_laboral`. Puede hacer `SELECT … FOR UPDATE` sobre su fila de `clinica` (tope del plan). Plan, estado, vigencia y `notificaciones_whatsapp` los cambia solo el operador.
 - `aceptacion_legal`: `app` solo inserta y lee. `auditoria`: `app` solo inserta (eventos sin clínica o de la suya) y lee los de su clínica. `llave_plataforma`: solo lectura para `app`.
@@ -203,7 +208,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 - **notificacion:** destinatario_id, tipo (`sin_confirmar|envio_fallido|cancelada_por_paciente|baja`), evento_id, creada_en, leida_en. Sin datos personales.
 - **aceptacion_legal:** clinica_id, usuario_id, documento (`terminos|aviso`), version (`legal_version`), aceptado_en, ip.
 
-### Falta (migración 0007, inicio de la Fase 2)
+### Falta (migración 0008, inicio de la Fase 2)
 - **baja_whatsapp** (global, **sin `clinica_id` ni RLS por clínica**, solo hash): telefono_idx (clave de plataforma), creada_en, reactivada_en, reactivada_por (personal). Índice único parcial sobre `telefono_idx` donde `reactivada_en` es nulo. Se consulta antes de cada envío; el estado de baja se calcula al leer.
 - **mensaje_whatsapp** (con `clinica_id` y RLS): paciente_id, evento_id (nulo en opt-in), tipo (`optin|recordatorio`), plantilla_version, wa_message_id (único), estado (`enviado|entregado|leido|fallido`), categoria (la reporta Meta), error_codigo (sin datos personales), creado_en, actualizado_en. Único por (evento_id, tipo) en recordatorios. Mide consumo por clínica y mes.
 - **webhook_evento** (sin RLS): clave_unica, recibido_en. **Sin cuerpo ni teléfonos.** Idempotencia del webhook.
@@ -313,13 +318,13 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
    8. Búsqueda por nombre en memoria.
    9. Auditoría en cada mutación. Pruebas: IDOR, visibilidad por rol, teléfono sin confirmar, cambio de teléfono, nombre solo con espacios, BD solo con texto cifrado.
 6. ✅ **Agenda** (crear, mover, cambiar paciente, cancelar; bloqueos; horario con `fuera_de_horario`; historial; prueba de concurrencia) y **configuración de clínica** (`/api/clinica`). Sin migración; acción nueva `VER_CLINICA`.
-7. Auditoría en toda mutación (revisión transversal).
+7. ✅ **Auditoría transversal:** tabla de cobertura de rutas + escenarios, 403 auditados (`acceso_denegado`), prueba de datos personales en logs y auditoría, 422 sin eco de la entrada, `hide_parameters`, migración 0007, `make auditoria`.
 8. Scripts de rotación por lotes (reenvolver DEKs, recifrar).
 9. Recuperación de contraseña (sin revelar si la cuenta existe) y envío automático de invitaciones, con `EmailProvider`.
 - **Listo cuando:** la matriz RBAC pasa completa; una prueba IDOR entre clínicas falla como debe; una prueba de concurrencia no permite doble reserva; crear o cambiar un paciente sin confirmar el teléfono falla; la BD muestra solo texto cifrado en los campos 🔒.
 
 ### Fase 2: WhatsApp, recordatorios y correo
-0. Migración 0007 (`baja_whatsapp`, `mensaje_whatsapp`, `webhook_evento`, funciones para el webhook).
+0. Migración 0008 (`baja_whatsapp`, `mensaje_whatsapp`, `webhook_evento`, funciones para el webhook).
 1. Interfaces y canales; validar formato con número de prueba de Meta.
 2. Opt-in: envío de `optin_v1`, estados y comprobaciones previas.
 3. Webhook: verificación, firma, idempotencia, estados, botones (validando remitente), baja global, acuses.
@@ -359,6 +364,8 @@ Completar 0.7; prueba real de WhatsApp; revisión de seguridad (OWASP ASVS selec
 | VPS | 2 vCPU / 4 GB, Ubuntu 24.04 LTS |
 | Respaldos | Cloudflare R2 o Backblaze B2 |
 | Librería de calendario | Elegir tras revisar licencias |
+
+**Decididas en el paso 7 (2026-11-21):** los 403 se auditan (`acceso_denegado`), los 404 no; las lecturas de pacientes no se auditan por ahora; el propietario lee la auditoría como superusuario (`make auditoria` en local; en el VPS, `psql` en el contenedor `db`), y una pantalla en el panel del operador queda para la Fase 3.
 
 **Decididas en el paso 6 (2026-11-21):** fechas sin zona en la zona de la clínica; horario laboral configurable por el admin y aplicado con `fuera_de_horario` como excepción auditada; se puede cambiar el paciente de una cita con historial visible en la UI; las citas nunca se borran (solo se cancelan); desactivar médico o borrar paciente con citas futuras → 409; agendar a un paciente no vinculado lo vincula; citas en el pasado permitidas.
 

@@ -18,7 +18,7 @@ from sqlalchemy import Row, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.authz import Actor, requerir
+from app.api.authz import Actor, denegar, requerir
 from app.api.deps import SessionDep, client_ip, get_key_provider
 from app.auth import audit, membership
 from app.auth.rbac import Accion, Alcance, alcance
@@ -118,12 +118,14 @@ async def _clinica(db: AsyncSession, cid: UUID) -> _Clinica:
     return _Clinica(r)
 
 
-def _permiso_tipo(actor: Actor, tipo: str, medico_id: UUID) -> None:
+async def _permiso_tipo(
+    db: AsyncSession, request: Request, actor: Actor, tipo: str, medico_id: UUID
+) -> None:
     """Bloqueos con BLOQUEAR_AGENDA, lo demás con GESTIONAR_CITAS; `propios` = su agenda."""
     accion = Accion.BLOQUEAR_AGENDA if tipo == "bloqueo" else Accion.GESTIONAR_CITAS
     permitido = alcance(actor.rol, accion)
     if permitido is None or (permitido is Alcance.PROPIOS and medico_id != actor.personal_id):
-        raise HTTPException(403, "Sin permiso")
+        await denegar(db, request, actor.usuario_id, accion)
 
 
 def _validar_rango(tipo: str, inicio: datetime, fin: datetime) -> None:
@@ -403,7 +405,7 @@ async def crear(
     body: EventoIn, request: Request, actor: GestionarCitas, db: SessionDep, provider: ProviderDep
 ) -> EventoOut:
     cid = actor.clinica_id
-    _permiso_tipo(actor, body.tipo, body.medico_id)
+    await _permiso_tipo(db, request, actor, body.tipo, body.medico_id)
     if (body.tipo in CON_PACIENTE) != (body.paciente_id is not None):
         raise HTTPException(422, "Consulta y procedimiento llevan paciente; otra y bloqueo, no")
     clinica = await _clinica(db, cid)
@@ -487,7 +489,7 @@ async def editar(
     actual = await _visible(db, actor, evento_id)
     if actual.estado == "cancelada":
         raise HTTPException(409, "El evento está cancelado")
-    _permiso_tipo(actor, actual.tipo, actual.medico_id)
+    await _permiso_tipo(db, request, actor, actual.tipo, actual.medico_id)
 
     # medico_id y paciente_id no admiten null (validado arriba); sala_id sí.
     medico_id: UUID = body.medico_id or actual.medico_id
@@ -503,7 +505,7 @@ async def editar(
     if cambia_paciente and actual.tipo not in CON_PACIENTE:
         raise HTTPException(422, "Otra y bloqueo no llevan paciente")
     if cambia_medico:
-        _permiso_tipo(actor, actual.tipo, medico_id)
+        await _permiso_tipo(db, request, actor, actual.tipo, medico_id)
         await _validar_medico(db, cid, medico_id)
     if sala_id != actual.sala_id:
         await _validar_sala(db, cid, sala_id)
@@ -573,7 +575,7 @@ async def cancelar(
     evento_id: UUID, request: Request, actor: GestionarCitas, db: SessionDep, provider: ProviderDep
 ) -> EventoOut:
     actual = await _visible(db, actor, evento_id)
-    _permiso_tipo(actor, actual.tipo, actual.medico_id)
+    await _permiso_tipo(db, request, actor, actual.tipo, actual.medico_id)
     if actual.estado == "cancelada":
         raise HTTPException(409, "El evento ya está cancelado")
     await db.execute(

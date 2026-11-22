@@ -18,7 +18,9 @@ from app.config import Settings, get_settings
 def make_engine(rol: str, settings: Settings | None = None) -> AsyncEngine:
     """Motor para un rol de BD. La API usa `app`; el panel del operador, `operador`."""
     s = settings or get_settings()
-    return create_async_engine(s.database_url(rol), pool_pre_ping=True)
+    # hide_parameters: los errores de SQL no incluyen los parámetros (hashes, índices ciegos,
+    # texto cifrado) en mensajes ni trazas que puedan acabar en logs.
+    return create_async_engine(s.database_url(rol), pool_pre_ping=True, hide_parameters=True)
 
 
 @asynccontextmanager
