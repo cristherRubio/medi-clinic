@@ -19,6 +19,7 @@ class Accion(StrEnum):
     GESTIONAR_CITAS = "gestionar_citas"  # crear, editar, cancelar
     BLOQUEAR_AGENDA = "bloquear_agenda"
     CREAR_PACIENTE = "crear_paciente"
+    EDITAR_PACIENTE = "editar_paciente"  # nombre, teléfono (confirmándolo), no enviar
     MARCAR_OPTIN = "marcar_optin"
     REACTIVAR_RECORDATORIOS = "reactivar_recordatorios"
     VINCULAR_PACIENTES = "vincular_pacientes"
@@ -41,6 +42,7 @@ MATRIZ: dict[Accion, dict[Rol, Alcance]] = {
     Accion.GESTIONAR_CITAS: {_A: _T, _S: _T, _M: _P},
     Accion.BLOQUEAR_AGENDA: {_A: _T, _S: _T, _M: _P},
     Accion.CREAR_PACIENTE: {_A: _T, _S: _T, _M: _T},
+    Accion.EDITAR_PACIENTE: {_A: _T, _S: _T, _M: _P},
     Accion.MARCAR_OPTIN: {_A: _T, _S: _T, _M: _P},
     Accion.REACTIVAR_RECORDATORIOS: {_A: _T, _S: _T, _M: _P},
     Accion.VINCULAR_PACIENTES: {_A: _T, _S: _T},

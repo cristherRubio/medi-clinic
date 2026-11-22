@@ -10,6 +10,7 @@ ESPERADO: dict[Accion, tuple[Alcance | None, Alcance | None, Alcance | None]] = 
     Accion.GESTIONAR_CITAS: (T, T, P),
     Accion.BLOQUEAR_AGENDA: (T, T, P),
     Accion.CREAR_PACIENTE: (T, T, T),
+    Accion.EDITAR_PACIENTE: (T, T, P),
     Accion.MARCAR_OPTIN: (T, T, P),
     Accion.REACTIVAR_RECORDATORIOS: (T, T, P),
     Accion.VINCULAR_PACIENTES: (T, T, None),

@@ -1,5 +1,7 @@
 # PROMPT MAESTRO — {{APP_NAME}}: agenda B2B para clínicas con recordatorios
 
+> **HISTÓRICO (2026-11-20).** Ya no se mantiene. La fuente de verdad ahora es `CLAUDE.md`, en la raíz del repo.
+
 > Pégalo al inicio de una sesión nueva y trabaja por fases. Nombre provisional: **medi-clinic**; dominio: `localhost` (ambos solo en `backend/app/config.py`).
 > **Última actualización:** 2026-10-29. Continúa desde la sección 0.
 > Para sesiones solo de backend existe `docs/PROMPT_BACKEND.md` (autocontenido). **Pendiente: actualizarlo con los cambios de WhatsApp de esta versión** (secciones 3, 5, 6, 7 y Fase 2).

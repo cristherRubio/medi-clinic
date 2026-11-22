@@ -10,7 +10,7 @@ Agenda web para clínicas y consultorios pequeños, con recordatorios de citas y
 backend/   API (FastAPI, Python 3.13, uv)
 frontend/  Interfaz (React + TypeScript), pendiente
 infra/     Docker Compose, roles de la base de datos y script de secretos locales
-docs/      Documentación del proyecto
+docs/      Documentación histórica (prompts); el estado vigente está en CLAUDE.md
 .github/   CI y Dependabot
 Makefile   Atajos de desarrollo (`make` muestra la lista)
 ```
@@ -57,6 +57,18 @@ docker compose -f infra/docker-compose.yml --profile tools run --rm bootstrap
 
 Los roles de la base de datos se crean solo cuando el volumen está vacío. Si regeneras los secretos, hay que borrar el volumen con `down -v`; si no, la API no podrá conectarse.
 
+### Alta de una clínica y su personal
+
+Mientras no exista el frontend, esto se hace por la API (documentación interactiva en `localhost:8000/docs`, solo en local). Las invitaciones **todavía no se envían por correo**: la API devuelve el token una sola vez y quien invita manda el enlace a mano.
+
+1. El operador inicia sesión (`/api/auth/login` y `/api/auth/login/totp`) y crea la clínica con `POST /api/operador/clinicas`. La respuesta trae el token de invitación del admin.
+2. El admin activa su cuenta con ese token (`/api/auth/activar/iniciar` y `/confirmar`): fija contraseña, configura TOTP y acepta términos.
+3. Admin o asistente invitan a médicos y asistentes con `POST /api/personal/invitaciones`. Los médicos activos más las invitaciones de médico pendientes cuentan para el tope del plan.
+4. Si alguien ya tiene cuenta en otra clínica, inicia sesión y acepta con `POST /api/auth/activar/aceptar`.
+5. Tras el login, cada persona elige clínica: `GET /api/auth/contextos` y `POST /api/auth/contexto`.
+
+Las invitaciones duran 72 h; el operador puede revocarlas o extenderlas desde `/api/operador/invitaciones/{id}/...`. Suspender una clínica (`PATCH /api/operador/clinicas/{id}` con `estado`) cierra sus sesiones y conserva los datos. Los recordatorios por API de WhatsApp se activan por clínica con `notificaciones_whatsapp` (Fase 2).
+
 ## Comandos
 
 | Comando | Qué hace |
@@ -79,7 +91,7 @@ Tres jobs en `.github/workflows/ci.yml`:
 - **secretos:** gitleaks sobre todo el historial.
 - **imagen:** construye la imagen del backend y la escanea con Trivy.
 
-Dependabot abre PRs semanales (Python, Docker y GitHub Actions). Fusiónalos solo con el CI en verde.
+Dependabot abre PRs semanales (Python, Docker y GitHub Actions). Fusiónalos solo con el CI en verde. No fusiones un cambio de versión mayor de Python en la imagen (p. ej. `3.13` → `3.15`) sin alinear antes `.python-version`, `pyproject.toml` y el CI.
 
 ## Secretos
 
