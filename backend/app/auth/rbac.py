@@ -31,6 +31,7 @@ class Accion(StrEnum):
     VER_PERSONAL = "ver_personal"
     EDITAR_PERSONAL = "editar_personal"
     VER_SALAS = "ver_salas"
+    VER_CLINICA = "ver_clinica"  # configuración: zona horaria, horario, textos
 
 
 _A, _S, _M = Rol.ADMIN, Rol.ASISTENTE, Rol.MEDICO
@@ -54,6 +55,7 @@ MATRIZ: dict[Accion, dict[Rol, Alcance]] = {
     Accion.VER_PERSONAL: {_A: _T, _S: _T, _M: _P},
     Accion.EDITAR_PERSONAL: {_A: _T},
     Accion.VER_SALAS: {_A: _T, _S: _T, _M: _T},
+    Accion.VER_CLINICA: {_A: _T, _S: _T, _M: _T},
 }
 
 
