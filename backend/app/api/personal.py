@@ -215,6 +215,18 @@ async def desactivar(personal_id: UUID, request: Request, actor: Borrar, db: Ses
     objetivo = await _objetivo(db, actor.clinica_id, personal_id)
     if personal_id == actor.personal_id or objetivo.rol == "admin":
         raise HTTPException(409, "No se puede desactivar a este usuario")
+    citas_futuras = (
+        await db.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM evento_agenda WHERE clinica_id = :c "
+                "AND medico_id = :i AND tipo <> 'bloqueo' AND estado <> 'cancelada' "
+                "AND upper(rango) > now())"
+            ),
+            {"c": actor.clinica_id, "i": personal_id},
+        )
+    ).scalar_one()
+    if citas_futuras:
+        raise HTTPException(409, "Tiene citas futuras: muévelas o cancélalas antes")
     await db.execute(
         text("UPDATE personal SET activo = false WHERE id = :i AND clinica_id = :c"),
         {"i": personal_id, "c": actor.clinica_id},
