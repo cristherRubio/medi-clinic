@@ -2,7 +2,7 @@
 
 La clave se deriva de la DEK con HKDF (una por columna), así que es distinta por clínica.
 Si se rota la DEK, los índices deben recalcularse junto con el recifrado.
-La normalización de teléfonos (E.164) llega en la Fase 2; aquí el valor ya viene normalizado.
+Los teléfonos llegan ya normalizados a E.164 (`app.telefono`; ver `PlatformCrypto.telefono_idx`).
 """
 
 import hashlib

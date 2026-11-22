@@ -13,8 +13,10 @@ from app.crypto.blind_index import blind_index, normalize_email
 from app.crypto.envelope import unwrap_dek
 from app.crypto.fields import FieldCipher, FieldContext
 from app.crypto.keys import KeyProvider
+from app.telefono import normalizar_e164
 
 EMAIL_COLUMN = "email"  # misma clave de índice para usuario e invitacion
+TELEFONO_COLUMN = "telefono"  # paciente.telefono_idx y baja_whatsapp (comunes a todas las clínicas)
 
 
 class PlatformCrypto:
@@ -28,6 +30,10 @@ class PlatformCrypto:
 
     def email_idx(self, email: str) -> bytes:
         return blind_index(self._index_dek, EMAIL_COLUMN, normalize_email(email))
+
+    def telefono_idx(self, telefono: str) -> bytes:
+        """Clave de plataforma: el mismo teléfono da la misma huella en todas las clínicas."""
+        return blind_index(self._index_dek, TELEFONO_COLUMN, normalizar_e164(telefono))
 
     @staticmethod
     def ctx(columna: str, usuario_id: UUID, tabla: str = "usuario") -> FieldContext:

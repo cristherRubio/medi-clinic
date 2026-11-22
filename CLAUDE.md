@@ -9,8 +9,8 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 ## 1. Estado actual (actualizar al cerrar cada paso)
 
 - **Fase 0:** terminada salvo el paso **0.7 (infra real)**, pospuesto hasta tener nombre, dominio y VPS.
-- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21).
-- **Siguiente:** Fase 1, **paso 5: pacientes** (§10). Las decisiones del paso 5 ya están confirmadas (§11).
+- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) implementado** en la rama `paso5` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR.
+- **Siguiente:** Fase 1, **paso 6: agenda** (§10).
 - **Orden acordado:** backend (Fases 1–2) y frontend (Fase 3) primero, todo probado en local con Docker; después el 0.7 y la Fase 4.
 
 **Pendientes menores:**
@@ -106,14 +106,16 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 
 **Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2 **async** + psycopg 3, Alembic (SQL explícito, `target_metadata = None`), argon2-cffi, pyotp, cryptography, pydantic-settings. Pruebas: pytest + pytest-asyncio + `starlette.testclient.TestClient` (paquete `httpx2` en dev).
 
-- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72). `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, auth, operator, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
+- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72). `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, auth, operator, pacientes, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
 - `app/crypto/`: `keys.py` (`KeyProvider`, `FileKeyProvider`), `envelope.py` (`generate_dek`, `wrap_dek(provider, dek, contexto)`, `unwrap_dek`, `rewrap_dek`), `fields.py` (`FieldCipher`, `FieldContext(tabla, columna, clinica_id, fila_id)`), `blind_index.py` (`blind_index`, `normalize_email`), `errors.py`.
 - `app/db/session.py`: `make_engine(rol)`, `clinic_session(engine, clinica_id)`.
 - `app/auth/`: `passwords`, `totp`, `totp_replay` (`consumir_paso`), `recovery`, `tokens` (`new_token`, `hash_token`), `throttle`, `audit` (`registrar`; rechaza claves de metadata con pinta de dato personal; sin `clinica_id` toma el de `app.clinica_id`), `sessions` (`SessionData` con `clinica_id` y `personal_id`; `crear`, `buscar`, `asignar_contexto`, `borrar`), `platform` (`PlatformCrypto`: `cipher`, `ctx`, `email_idx`, `throttle_key`, `csrf_key`; `load_platform_crypto`), `membership` (`fijar_contexto`, `cargar_cipher`, `crear_personal`, `registrar_aceptacion`), `rbac` (`Rol`, `Alcance`, `Accion`, `MATRIZ`, `alcance(rol, accion)`).
-- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`.
+- `app/telefono.py`: `normalizar_e164` (México `+52` por defecto; acepta `52…`, `521…` y otros `+código…`); `PlatformCrypto.telefono_idx` normaliza y usa la clave de plataforma.
+- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`.
 - `app/scripts/bootstrap_platform.py`: DEK de plataforma + primer operador (corre con `migrador`).
 - **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`. **Siguiente: 0007.**
 - **Infra:** `infra/docker-compose.yml` (`db`, `api`; `migrate` y `bootstrap` con perfil `tools`), `infra/db/` (`init-roles.sh`, `roles.sql`), `infra/scripts/gen-local-secrets.sh`. Dockerfile de una etapa sobre `python:3.13-slim`: parche de `zlib1g`, sin `pip`, usuario `app` 10001, sistema de archivos de solo lectura. `frontend/` vacío.
+- **Pruebas de BD en local (opcional):** contenedor temporal `postgres:16` publicado en `127.0.0.1:55432`, `infra/db/init-roles.sh` (con `PGHOST/PGPORT/PGPASSWORD/POSTGRES_USER/POSTGRES_DB/SECRETS_DIR/ROLES_SQL`), `alembic upgrade head` y `pytest` con `APP_TEST_DB=1 APP_DB_HOST=127.0.0.1 APP_DB_PORT=55432 APP_SECRETS_DIR=../secrets`. No sustituye al CI.
 - **CI** (`.github/workflows/ci.yml`; `dependabot.yml` vive en `.github/`, no en `workflows/`): job `backend` (Postgres 16, roles, migraciones, `make check`, `pip-audit` de producción), `secretos` (gitleaks por `docker run`, historial completo), `imagen` (build + Trivy por `docker run aquasec/trivy`, `--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1`; **no se usa `trivy-action`**). Si Trivy falla por la imagen base con parche disponible, se actualiza ese paquete en el Dockerfile. En la Fase 3 se añaden `eslint`, `tsc` y `npm audit`.
 
 ### Patrón de un endpoint de clínica
@@ -135,6 +137,7 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 | Crear/editar/cancelar citas | no | sí | sí | las suyas |
 | Bloquear agenda | no | cualquier médico | cualquier médico | la suya |
 | Agregar pacientes (confirmando el teléfono) | no | sí | sí | sí |
+| Editar pacientes (nombre, teléfono confirmándolo, no enviar) | no | sí | sí | sus pacientes |
 | Marcar la autorización de recordatorios | no | sí | sí | sus pacientes |
 | Reactivar recordatorios tras baja o rechazo | no | sí | sí | sus pacientes |
 | Vincular pacientes a otros médicos | no | sí | sí | no |
@@ -145,7 +148,7 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 | Ver salas | no | sí | sí | sí |
 | Crear/editar salas | no | sí | no | no |
 | Configurar clínica (texto manual, política, mapa, horario) | no | sí | no | no |
-| Borrar (pacientes, citas) y desactivar/reactivar personal | no | sí | no | no |
+| Borrar y restaurar (pacientes, citas) y desactivar/reactivar personal | no | sí | no | no |
 
 La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Alcance`, `todos|propios`; rol ausente = sin permiso; el operador no figura). Acciones nuevas se agregan ahí, nunca con `if rol == ...`. Un médico solo ve pacientes vinculados a él (`paciente_medico`).
 
@@ -213,6 +216,12 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
   - `GET /api/personal` (admin y asistente: todos; médico: a sí mismo); `PATCH /{id}` (cada quien lo suyo; a otros solo admin; `contacto_preferido` solo médicos); `POST /{id}/desactivar` y `/reactivar` (solo admin; ni a un admin ni a uno mismo; desactivar borra sus sesiones; reactivar a un médico revalida el tope).
   - `POST /api/personal/invitaciones` (rol `asistente` o `medico`; `admin` → 422; asistentes solo los invita el admin; 409 si el correo ya es personal de esa clínica, aunque inactivo, o tiene invitación pendiente; token una sola vez), `GET /invitaciones` (admin y asistente), `POST /invitaciones/{id}/revocar`.
   - `GET /api/salas` (todos), `POST` y `PATCH /api/salas/{id}` (solo admin).
+- **Pacientes (paso 5):**
+  - `POST /api/pacientes` (`nombre`, `telefono`, `telefono_confirmado: true` obligatorio, `medicos`): admin y asistente vinculan ≥ 1 médico activo; el médico queda vinculado a sí mismo (vincular a otros: 403). Devuelve `telefono_repetido` (aviso, no bloqueo; misma clínica, sin eliminados).
+  - `GET /api/pacientes` (`?eliminados=true` solo admin), `GET /{id}` (el admin también ve eliminados), `POST /buscar` (`{q}` en el cuerpo para no poner nombres en la URL; sin acentos ni mayúsculas, en memoria).
+  - `PATCH /{id}` (`EDITAR_PACIENTE`): cambiar el teléfono exige `telefono_confirmado: true` y, si el número normalizado cambia, reinicia el opt-in.
+  - `POST /{id}/autorizacion {autorizado}` (`MARCAR_OPTIN`; desmarcar → `sin_solicitar`), `POST /{id}/reactivar-recordatorios` (solo desde `rechazado`; 409 si no; gancho de `baja_whatsapp` para la Fase 2), `PUT /{id}/medicos` (reemplaza la lista; ≥ 1 médico activo), `DELETE /{id}` y `POST /{id}/restaurar` (admin).
+  - Médico: paciente no vinculado = 404 en lectura y mutaciones. Auditoría: `paciente_creado|editado|autorizacion|vinculado|eliminado|restaurado`, `recordatorios_reactivados`.
 - **Cabeceras:** CSP estricta, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`. Frontend sin scripts de terceros, sin analítica, sin datos personales en `localStorage`/`sessionStorage`/URLs.
 - **Secretos como archivos** en `./secrets/` (carpeta 700; archivos 644 solo en desarrollo local, porque el uid 10001 del contenedor debe leerlos; ignorados por git). Nunca en variables de entorno; sin `.env.example`. Existen: `db_password`, `db_migrador_password`, `db_app_password`, `db_operador_password`, `kek_v1`, `resend_api_key`. Fase 2: `meta_access_token`, `meta_app_secret`, `meta_verify_token`.
 - **Rotación de KEK:** invalida las claves derivadas (contadores y CSRF); los usuarios vuelven a entrar. Va al runbook.
@@ -262,7 +271,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 2. ✅ Operador, activación que crea `personal` y `aceptacion_legal`, invitaciones a usuarios existentes, contexto de clínica en la sesión (0006).
 3. ✅ RBAC con matriz como datos y `requerir(accion)`.
 4. ✅ `/api/personal` y `/api/salas` con límite de plan.
-5. **Pacientes (siguiente).** Probablemente sin migración (la tabla ya tiene todo).
+5. ✅ **Pacientes** (sin migración; acción nueva `EDITAR_PACIENTE`; `restaurar` incluido).
    1. `/api/pacientes`: crear, listar, ver, editar y borrado lógico (`eliminado_en`).
    2. Nombre y teléfono cifrados; **normalización E.164 adelantada desde la Fase 2** (México `+52`, sin dependencias nuevas si es posible); `telefono_idx` con clave de plataforma sobre el valor normalizado (añadir algo como `telefono_idx` a `PlatformCrypto`, junto a `email_idx`).
    3. Confirmación obligatoria del teléfono al crear; cambiarlo la repite y reinicia el opt-in.
@@ -272,7 +281,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
    7. Visibilidad: admin y asistente, todos; médico, solo vinculados.
    8. Búsqueda por nombre en memoria.
    9. Auditoría en cada mutación. Pruebas: IDOR, visibilidad por rol, teléfono sin confirmar, cambio de teléfono, nombre solo con espacios, BD solo con texto cifrado.
-6. Agenda: crear, mover y cancelar; bloqueos; tipos; exclusiones; estados; comentarios. Decidir qué pasa con las citas de personal desactivado.
+6. **Agenda (siguiente):** crear, mover y cancelar; bloqueos; tipos; exclusiones; estados; comentarios. Decidir qué pasa con las citas de personal desactivado.
 7. Auditoría en toda mutación (revisión transversal).
 8. Scripts de rotación por lotes (reenvolver DEKs, recifrar).
 9. Recuperación de contraseña (sin revelar si la cuenta existe) y envío automático de invitaciones, con `EmailProvider`.
