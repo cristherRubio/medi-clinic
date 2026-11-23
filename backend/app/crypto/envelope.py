@@ -52,6 +52,13 @@ def unwrap_dek(provider: KeyProvider, wrapped: bytes, context: str) -> bytes:
         raise DecryptionError("No se pudo descifrar la DEK") from None
 
 
+def kek_version_of(wrapped: bytes) -> int:
+    """Versión de KEK con la que está envuelta una DEK (para saber si falta reenvolverla)."""
+    if len(wrapped) < _HEADER.size:
+        raise DecryptionError("DEK envuelta inválida")
+    return int(_HEADER.unpack(wrapped[: _HEADER.size])[1])
+
+
 def rewrap_dek(provider: KeyProvider, wrapped: bytes, context: str) -> bytes:
     """Rotación de KEK: reenvuelve la DEK con la KEK activa sin tocar los datos."""
     return wrap_dek(provider, unwrap_dek(provider, wrapped, context), context)

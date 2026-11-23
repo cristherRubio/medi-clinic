@@ -15,6 +15,7 @@ from app.auth.tokens import hash_token, new_token
 from app.auth.totp import new_totp_secret
 from app.config import get_settings
 from app.crypto.envelope import generate_dek, wrap_dek
+from app.crypto.fields import FieldCipher, FieldContext
 from app.crypto.keys import KeyProvider
 from app.db.session import make_engine
 from app.main import create_app
@@ -138,8 +139,14 @@ async def crear_usuario(
 
 
 async def crear_clinica(provider: KeyProvider) -> UUID:
-    """Alta por el motor `operador` (única vía). Con DEK real, para poder cifrar personal."""
+    """Alta por el motor `operador` (única vía). Con DEK real y datos legales cifrados con
+    ella (ficticios), para poder cifrar personal y rotar la DEK."""
     cid, dek = uuid4(), generate_dek()
+    cipher = FieldCipher({1: dek}, 1)
+
+    def legal(columna: str) -> bytes:
+        return cipher.encrypt("FICTICIO", FieldContext("clinica", columna, cid, cid))
+
     e = make_engine("operador")
     try:
         async with e.begin() as c:
@@ -147,9 +154,15 @@ async def crear_clinica(provider: KeyProvider) -> UUID:
                 text(
                     "INSERT INTO clinica (id, nombre, tipo_persona, nombre_legal, rfc, "
                     "representante_nombre, representante_curp, dek_wrapped, dek_version) "
-                    "VALUES (:id, 'test', 'fisica', 'test', :x, :x, :x, :w, 1)"
+                    "VALUES (:id, 'test', 'fisica', 'test', :r, :rn, :rc, :w, 1)"
                 ),
-                {"id": cid, "x": b"x", "w": wrap_dek(provider, dek, f"clinica|{cid}|v1")},
+                {
+                    "id": cid,
+                    "r": legal("rfc"),
+                    "rn": legal("representante_nombre"),
+                    "rc": legal("representante_curp"),
+                    "w": wrap_dek(provider, dek, f"clinica|{cid}|v1"),
+                },
             )
     finally:
         await e.dispose()

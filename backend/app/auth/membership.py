@@ -15,15 +15,37 @@ async def fijar_contexto(db: AsyncSession, clinica_id: UUID) -> None:
     await db.execute(text("SELECT set_config('app.clinica_id', :c, true)"), {"c": str(clinica_id)})
 
 
+def contexto_dek(clinica_id: UUID, version: int) -> str:
+    return f"clinica|{clinica_id}|v{version}"
+
+
 async def cargar_cipher(db: AsyncSession, provider: KeyProvider, clinica_id: UUID) -> FieldCipher:
-    """Requiere el contexto de esa clínica ya fijado (RLS)."""
+    """Requiere el contexto de esa clínica ya fijado (RLS).
+
+    Durante una rotación (`app.scripts.rotacion`) carga también la DEK anterior, para leer
+    lo que aún no se recifra; lo nuevo siempre se cifra con la activa.
+    """
     row = (
         await db.execute(
-            text("SELECT dek_wrapped, dek_version FROM clinica WHERE id = :i"), {"i": clinica_id}
+            text(
+                "SELECT dek_wrapped, dek_version, dek_anterior_wrapped, dek_anterior_version "
+                "FROM clinica WHERE id = :i"
+            ),
+            {"i": clinica_id},
         )
     ).one()
-    dek = unwrap_dek(provider, bytes(row.dek_wrapped), f"clinica|{clinica_id}|v{row.dek_version}")
-    return FieldCipher({row.dek_version: dek}, row.dek_version)
+    deks = {
+        row.dek_version: unwrap_dek(
+            provider, bytes(row.dek_wrapped), contexto_dek(clinica_id, row.dek_version)
+        )
+    }
+    if row.dek_anterior_wrapped is not None:
+        deks[row.dek_anterior_version] = unwrap_dek(
+            provider,
+            bytes(row.dek_anterior_wrapped),
+            contexto_dek(clinica_id, row.dek_anterior_version),
+        )
+    return FieldCipher(deks, row.dek_version)
 
 
 async def crear_personal(

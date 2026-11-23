@@ -32,6 +32,7 @@ services:
     environment:
       APP_ENTORNO: local
       APP_SECRETS_DIR: /run/secrets
+      APP_KEK_ACTIVE_VERSION: ${APP_KEK_ACTIVE_VERSION:-1}
     secrets:
       - db_app_password
       - kek_v1
@@ -82,6 +83,34 @@ services:
     environment:
       APP_ENTORNO: local
       APP_SECRETS_DIR: /run/secrets
+    secrets:
+      - db_migrador_password
+      - kek_v1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # Rotación de llaves (README, "Rotación de llaves"). Al rotar la KEK, agrega aquí y en
+  # `api` el secreto kek_v<N> nuevo y exporta APP_KEK_ACTIVE_VERSION=<N>.
+  rotacion:
+    build:
+      context: ../backend
+    profiles: [tools]
+    entrypoint: ["python", "-m", "app.scripts.rotacion"]
+    command: ["estado"]
+    environment:
+      APP_ENTORNO: local
+      APP_SECRETS_DIR: /run/secrets
+      APP_KEK_ACTIVE_VERSION: ${APP_KEK_ACTIVE_VERSION:-1}
     secrets:
       - db_migrador_password
       - kek_v1
