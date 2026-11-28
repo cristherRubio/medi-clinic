@@ -20,11 +20,13 @@ from app.api.deps import (
     sesion_completa,
     verificar_csrf,
 )
+from app.api.entrega import entregar_invitacion
 from app.auth import audit
 from app.auth.platform import PlatformCrypto
 from app.auth.sessions import SessionData
 from app.auth.tokens import hash_token, new_token
 from app.config import get_settings
+from app.correo import EmailProvider, get_correo
 from app.crypto.envelope import generate_dek, wrap_dek
 from app.crypto.fields import FieldCipher, FieldContext
 from app.crypto.keys import KeyProvider
@@ -62,6 +64,7 @@ async def exigir_operador(
 OpDb = Annotated[AsyncSession, Depends(get_operador_session)]
 OperadorDep = Annotated[SessionData, Depends(exigir_operador)]
 ProviderDep = Annotated[KeyProvider, Depends(get_key_provider)]
+CorreoDep = Annotated[EmailProvider, Depends(get_correo)]
 
 router = APIRouter(
     prefix="/api/operador", tags=["operador"], dependencies=[Depends(exigir_operador)]
@@ -85,7 +88,15 @@ class ClinicaIn(BaseModel):
 class ClinicaCreada(BaseModel):
     clinica_id: UUID
     invitacion_id: UUID
-    token: str  # se muestra una sola vez; el operador arma y envía el enlace
+    token: str | None  # solo sin proveedor de correo: se muestra una vez y se envía a mano
+    correo_enviado: bool
+    expira_en: datetime
+
+
+class InvitacionReenviada(BaseModel):
+    invitacion_id: UUID
+    token: str | None  # solo sin proveedor de correo; el token anterior deja de servir
+    correo_enviado: bool
     expira_en: datetime
 
 
@@ -125,6 +136,7 @@ async def crear_clinica(
     op: OperadorDep,
     platform: PlatformDep,
     provider: ProviderDep,
+    correo: CorreoDep,
 ) -> ClinicaCreada:
     settings = get_settings()
     try:
@@ -191,8 +203,22 @@ async def crear_clinica(
         ip=client_ip(request, settings),
         metadata={"plan": body.plan, "invitacion_id": str(iid)},
     )
+    enviado = await entregar_invitacion(
+        db,
+        correo,
+        email=body.email_admin.strip(),
+        clinica=body.nombre.strip(),
+        rol="admin",
+        token=token,
+    )
     await db.commit()
-    return ClinicaCreada(clinica_id=cid, invitacion_id=iid, token=token, expira_en=expira)
+    return ClinicaCreada(
+        clinica_id=cid,
+        invitacion_id=iid,
+        token=None if enviado else token,
+        correo_enviado=enviado,
+        expira_en=expira,
+    )
 
 
 def _cifrar_email(platform: PlatformCrypto, email: str, invitacion_id: UUID) -> bytes:
@@ -325,3 +351,56 @@ async def _mover_expiracion(
         ip=client_ip(request, get_settings()),
     )
     await db.commit()
+
+
+@router.post("/invitaciones/{invitacion_id}/reenviar", dependencies=CSRF)
+async def reenviar_invitacion(
+    invitacion_id: UUID,
+    request: Request,
+    db: OpDb,
+    op: OperadorDep,
+    platform: PlatformDep,
+    correo: CorreoDep,
+) -> InvitacionReenviada:
+    """Token nuevo y otras 72 h para una invitación sin usar (también si ya venció)."""
+    settings = get_settings()
+    token = new_token()
+    row = (
+        await db.execute(
+            text(
+                "UPDATE invitacion SET token_hash = :h, "
+                "expira_en = now() + make_interval(hours => :hr) "
+                "WHERE id = :i AND usada_en IS NULL "
+                "RETURNING clinica_id, rol, email, expira_en"
+            ),
+            {"h": hash_token(token), "hr": settings.invitacion_horas, "i": invitacion_id},
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(404, "No encontrado")
+    clinica = (
+        await db.execute(text("SELECT nombre FROM clinica WHERE id = :c"), {"c": row.clinica_id})
+    ).scalar_one()
+    await audit.registrar(
+        db,
+        accion="invitacion_reenviada",
+        actor_usuario_id=op.usuario_id,
+        clinica_id=row.clinica_id,
+        entidad="invitacion",
+        entidad_id=invitacion_id,
+        ip=client_ip(request, settings),
+        metadata={"rol": row.rol},
+    )
+    email = platform.cipher.decrypt(
+        bytes(row.email), platform.ctx("email", invitacion_id, tabla="invitacion")
+    )
+    enviado = await entregar_invitacion(
+        db, correo, email=email, clinica=clinica, rol=row.rol, token=token
+    )
+    await db.commit()
+    return InvitacionReenviada(
+        invitacion_id=invitacion_id,
+        token=None if enviado else token,
+        correo_enviado=enviado,
+        expira_en=row.expira_en,
+    )

@@ -33,9 +33,14 @@ services:
       APP_ENTORNO: local
       APP_SECRETS_DIR: /run/secrets
       APP_KEK_ACTIVE_VERSION: ${APP_KEK_ACTIVE_VERSION:-1}
+      # Correo (README, "Correo"): valores en infra/.env; sin proveedor no se envía nada.
+      APP_CORREO_PROVEEDOR: ${APP_CORREO_PROVEEDOR:-ninguno}
+      APP_CORREO_REMITENTE: ${APP_CORREO_REMITENTE:-medi-clinic <onboarding@resend.dev>}
+      APP_URL_PUBLICA: ${APP_URL_PUBLICA:-http://localhost:5173}
     secrets:
       - db_app_password
       - kek_v1
+      # - resend_api_key   # descomentar al usar APP_CORREO_PROVEEDOR=resend
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -142,6 +147,8 @@ secrets:
     file: ../secrets/db_app_password
   db_operador_password:
     file: ../secrets/db_operador_password
+  # resend_api_key:          # descomentar junto con el de `api`
+  #   file: ../secrets/resend_api_key
 
 volumes:
   pgdata:

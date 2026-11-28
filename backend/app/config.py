@@ -5,6 +5,7 @@ Los secretos se leen desde archivos (directorio `SECRETS_DIR`), nunca del reposi
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
@@ -50,6 +51,22 @@ class Settings(BaseSettings):
     activar_ip_ventana_min: int = 15
     activar_token_max: int = 5  # intentos de TOTP fallidos por invitación
     activar_token_ventana_min: int = 15
+    # Correo (ver app/correo.py). "ninguno": no se envía nada (invitaciones a mano).
+    correo_proveedor: Literal["ninguno", "resend"] = "ninguno"
+    # {{REMITENTE}} provisional: el de pruebas de Resend solo entrega al dueño de la cuenta.
+    correo_remitente: str = "medi-clinic <onboarding@resend.dev>"
+    # {{URL_PUBLICA}} base de los enlaces de los correos (el frontend, Fase 3).
+    url_publica: str = "http://localhost:5173"
+    # Restablecimiento de contraseña
+    restablecer_minutos: int = 60
+    olvide_ip_max: int = 5  # solicitudes por IP
+    olvide_ip_ventana_min: int = 15
+    olvide_cuenta_max: int = 3  # solicitudes por cuenta (excedidas: 202 igual, sin correo)
+    olvide_cuenta_ventana_min: int = 60
+    restablecer_ip_max: int = 10  # intentos fallidos por IP
+    restablecer_ip_ventana_min: int = 15
+    restablecer_token_max: int = 5  # códigos TOTP fallidos por enlace
+    restablecer_token_ventana_min: int = 15
 
     def read_secret(self, name: str) -> str:
         """Lee un secreto desde `<secrets_dir>/<name>`. Nunca se registra en logs."""

@@ -9,27 +9,13 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 ## 1. Estado actual (actualizar al cerrar cada paso)
 
 - **Fase 0:** terminada salvo el paso **0.7 (infra real)**, pospuesto hasta tener nombre, dominio y VPS.
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) implementado** en la rama `paso5` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR.
-- **Siguiente:** Fase 1, **paso 6: agenda** (§10).
-=======
-- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
-- **Paso 6 (agenda y configuración de clínica) terminado** (rama `fase1-paso6`, CI en verde y PR fusionado el 2026-11-21). Desde aquí se trabaja directo en `main` (§2).
-- **Paso 7 (auditoría transversal) terminado.**
-- **Paso 8 (rotación de llaves) implementado** en `main` sin empujar (2026-11-21): `make check-db` en verde; falta el push del propietario y el CI.
-- **Siguiente:** Fase 1, **paso 9: recuperación de contraseña e invitaciones por correo** (§10).
->>>>>>> Stashed changes
-=======
-- **Fase 1:** pasos **1–4 terminados** y fusionados en `main` (PR #16; CI en verde el 2026-11-21). **Paso 5 (pacientes) terminado** (rama `paso5`, CI en verde y PR fusionado el 2026-11-21).
-- **Paso 6 (agenda y configuración de clínica) implementado** en la rama `fase1-paso6` (2026-11-21): pruebas de BD en verde contra Postgres 16 local; falta CI y PR (los hace el propietario).
-- **Siguiente:** Fase 1, **paso 7: auditoría transversal** (§10).
->>>>>>> 1d0974906614c9d3e287ae381826473a6cb08361
+- **Fase 1:** pasos **1–8 terminados** y en `main` (pasos 1–6 por PR; 7 y 8 directo en `main`). **Paso 9 (correo y restablecimiento de contraseña) implementado** en `main` sin empujar (2026-11-23): `make check-db` en verde; falta el push del propietario y el CI. Con el paso 9, **la Fase 1 queda completa**.
+- **Siguiente:** **Fase 2, paso 0** (migración 0010: `baja_whatsapp`, `mensaje_whatsapp`, `webhook_evento`) (§10).
 - **Orden acordado:** backend (Fases 1–2) y frontend (Fase 3) primero, todo probado en local con Docker; después el 0.7 y la Fase 4.
 
 **Pendientes menores:**
 1. ~~Prueba de "sin datos personales en logs"~~: hecha en el paso 7 (`tests/api/test_auditoria.py`).
-2. Invitaciones entregadas a mano: el token se devuelve una sola vez y quien invita manda el enlace. Pasar a correo automático en el paso 9.
+2. Correo listo pero **sin proveedor configurado** (`APP_CORREO_PROVEEDOR=ninguno`): las invitaciones siguen devolviendo el token y el restablecimiento no envía nada. El propietario puede probar con una cuenta gratuita de Resend sin dominio (README, "Correo"); el dominio propio va en el 0.7e.
 3. Suspender una clínica borra sus sesiones, pero su personal todavía puede iniciar sesión (y `GET /api/auth/contextos` devuelve la lista vacía). Decidir si el login mismo debe fallar.
 4. Desactivar a un médico con citas futuras da 409 (paso 6); sus vínculos con pacientes se conservan.
 5. Dependabot ya agrupa `uv` y `github-actions` (un PR semanal por ecosistema) e ignora saltos de versión de Python en la imagen (PR #17). Quedan ramas viejas de Dependabot sin PR en `origin`; se pueden borrar.
@@ -47,15 +33,7 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - **Lee el código antes de cambiarlo.** Antes de cambiar una tabla, política, permiso o función que ya existe, revisa el código y **las pruebas que la usan** (el paso 1 rompió pruebas de auditoría y bootstrap por no hacerlo). No adivines.
 - **Una fase y un paso a la vez.** Al terminar: qué cambió, cómo probarlo y siguiente paso; actualiza §1.
 - **Código y pruebas van juntos.** Si un cambio rompe una prueba existente, corrígela en el mismo cambio. Verifica siempre con `make format && make check` antes de dar algo por terminado. Lo que toca BD se valida con `make check-db` (y luego en CI, §3): dilo explícitamente.
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-- **Git:** commits, push y PRs **solo cuando el propietario lo pida**. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot). Los PRs se abren con `gh pr create` (cuando el propietario lo pida).
-=======
 - **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. **Antes de la v1 se trabaja directo en `main`** (sin ramas ni PRs propios, 2026-11-21): el CI corre una vez por push a `main` y en los PRs (Dependabot). Sin compuerta previa, si el CI falla se corrige con el siguiente push; antes de empujar cambios de BD, `make check-db`. Los PRs de Dependabot sí necesitan CI en verde antes de fusionar. Al llegar la v1 (o con más gente) se vuelve a ramas + PR.
->>>>>>> Stashed changes
-=======
-- **Git:** **solo el propietario hace commits, push y PRs** (y las fusiones). Claude no los hace aunque el paso esté terminado: al cerrar un paso, indica que está listo para commit. `gh` **no está instalado** en el entorno; no lo uses ni lo sugieras como paso de Claude. Cada paso en una rama nueva desde `main` actualizado: `git checkout main && git pull && git checkout -b faseN-pasoM`. CI en verde antes de fusionar (también los PRs de Dependabot).
->>>>>>> 1d0974906614c9d3e287ae381826473a6cb08361
 - Si algo choca con este documento, **avisa**; no cambies decisiones en silencio. Si una decisión cambia, actualiza este archivo.
 - Nada fuera de alcance (§4) ni dependencias nuevas sin justificarlas en una línea (`uv add`).
 - Todo modular con interfaces: canal de recordatorios, cliente de WhatsApp, proveedor de claves, proveedor de correo, pagos.
@@ -64,7 +42,7 @@ Este archivo es la **fuente de verdad** del proyecto: producto, decisiones, esta
 - Entorno del propietario: Ubuntu, repo en `~/Documents/personal/medi-clinic`, puerto 8000 libre.
 
 ### Reglas de código (aprendidas; no negociables)
-- **Una migración ya fusionada nunca se edita.** Las correcciones van en una migración nueva. La siguiente es la **0009**.
+- **Una migración ya fusionada nunca se edita.** Las correcciones van en una migración nueva. La siguiente es la **0010**.
 - **Sin SQL armado con f-strings ni `# noqa: S608`.** Consultas de texto fijo con parámetros; los `UPDATE` parciales usan `CASE WHEN :bandera THEN :valor ELSE columna END`. No se silencian alertas de seguridad de ruff. (Las migraciones sí componen DDL con constantes propias, como `CID`.)
 - **Textos de entrada con `StringConstraints(strip_whitespace=True, min_length=1, ...)`**, no solo `Field(min_length=1)`: un texto de solo espacios debe dar 422, no 500 ni un valor vacío guardado.
 - mypy estricto: en pruebas, los resultados de `execute` se tipan con `cast("CursorResult[Any]", ...)` o ayudantes tipados.
@@ -132,7 +110,7 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 
 **Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2 **async** + psycopg 3, Alembic (SQL explícito, `target_metadata = None`), argon2-cffi, pyotp, cryptography, pydantic-settings. Pruebas: pytest + pytest-asyncio + `starlette.testclient.TestClient` (paquete `httpx2` en dev).
 
-- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72). `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, agenda, auth, clinica, operator, pacientes, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
+- `app/config.py`: Settings (prefijo `APP_`), `read_secret`, `database_url(rol)`, `app_name`, `dominio`, `legal_version`, `invitacion_horas` (72), `correo_proveedor` (`ninguno|resend`), `correo_remitente` y `url_publica` (provisionales), `restablecer_minutos` (60) y los límites `olvide_*`/`restablecer_*`. `app/security.py` (cabeceras). `app/main.py` (`create_app`; routers: activación, agenda, auth, clinica, contrasena, operator, pacientes, personal, salas; `/docs` solo con `APP_ENTORNO=local`).
 - `app/crypto/`: `keys.py` (`KeyProvider`, `FileKeyProvider`), `envelope.py` (`generate_dek`, `wrap_dek(provider, dek, contexto)`, `unwrap_dek`, `rewrap_dek`), `fields.py` (`FieldCipher`, `FieldContext(tabla, columna, clinica_id, fila_id)`), `blind_index.py` (`blind_index`, `normalize_email`), `errors.py`.
 - `app/db/session.py`: `make_engine(rol)`, `clinic_session(engine, clinica_id)`.
 - `app/auth/`: `passwords`, `totp`, `totp_replay` (`consumir_paso`), `recovery`, `tokens` (`new_token`, `hash_token`), `throttle`, `audit` (`registrar`; rechaza claves de metadata con pinta de dato personal; sin `clinica_id` toma el de `app.clinica_id`), `sessions` (`SessionData` con `clinica_id` y `personal_id`; `crear`, `buscar`, `asignar_contexto`, `borrar`), `platform` (`PlatformCrypto`: `cipher`, `ctx`, `email_idx`, `throttle_key`, `csrf_key`; `load_platform_crypto`), `membership` (`fijar_contexto`, `cargar_cipher`, `crear_personal`, `registrar_aceptacion`), `rbac` (`Rol`, `Alcance`, `Accion`, `MATRIZ`, `alcance(rol, accion)`).
@@ -140,9 +118,10 @@ Agenda por médico (y sala, opcional) con roles. Recordatorios por **WhatsApp co
 - **Rotación de llaves:** `app/crypto/columnas.py` (registro `COLUMNAS_CLINICA` con consultas fijas por columna para leer/escribir/contar lo que no está en la versión activa; `COLUMNAS_PLATAFORMA`; `BYTEA_NO_CIFRADAS`), `app/crypto/rotacion.py` (`rotar_kek`, `iniciar_rotacion_dek`, `rotar_dek_clinica`, `rotar_dek_todas`, `estado`), `app/scripts/rotacion.py` (CLI) y servicio `rotacion` en docker-compose (perfil `tools`, `migrador` + KEK). `membership.cargar_cipher` carga también la DEK anterior durante una rotación; `contexto_dek(cid, v)`; `envelope.kek_version_of`. **Una columna cifrada nueva va en `COLUMNAS_CLINICA`** (la prueba del registro compara con todos los `bytea` del esquema).
 - `app/telefono.py`: `normalizar_e164` (México `+52` por defecto; acepta `52…`, `521…` y otros `+código…`); `PlatformCrypto.telefono_idx` normaliza y usa la clave de plataforma.
 - `app/main.py` también instala un manejador de 422 que **no devuelve `input` ni `ctx`** (solo `type`, `loc`, `msg`). `make_engine` usa `hide_parameters=True` (los errores de SQL no llevan parámetros a trazas ni logs).
-- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`, `denegar(db, request, usuario_id, accion)`: 403 auditado), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`, `clinica.py` (configuración), `agenda.py`.
+- **Correo:** `app/correo.py` (`EmailProvider`, `SinCorreo`, `ResendProvider` con `httpx2` —dependencia de producción desde el paso 9—, `get_correo`, plantillas `invitacion` y `restablecimiento`; enlaces con el token tras `#`). `app/api/entrega.py` (`entregar_invitacion`: envía antes del commit; si falla, rollback y 502). En pruebas, `MemoriaCorreo` y las fixtures `correo` / `client_correo` (los demás clientes usan `SinCorreo`).
+- `app/api/`: `deps.py` (`SessionDep` sin commit automático, `PlatformDep`, `get_key_provider`, `client_ip`, `sesion_actual`, `sesion_completa`, `verificar_csrf`), `authz.py` (`Actor`, `requerir(accion)`, `denegar(db, request, usuario_id, accion)`: 403 auditado), `auth.py` (login, TOTP, recuperación, logout, `/me`, `/contextos`, `/contexto`), `activation.py` (`/iniciar`, `/confirmar`, `/aceptar`), `operator.py` (panel del operador; **el módulo se llama `operator`, la ruta `/api/operador`**), `personal.py` (referencia de patrón para recursos de clínica), `salas.py`, `pacientes.py`, `clinica.py` (configuración), `agenda.py`, `contrasena.py` (olvidé / restablecer).
 - `app/scripts/bootstrap_platform.py`: DEK de plataforma + primer operador (corre con `migrador`).
-- **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`; 0007 `migrador` lee `auditoria` (política `migrador_lee`); 0008 `clinica.dek_anterior_wrapped/_version` y políticas de `migrador` para recifrar (`clinica`, `personal`, `paciente`, `evento_agenda`). **Siguiente: 0009.**
+- **Migraciones:** 0001 base; 0002 auth; 0003 `totp_ultimo_paso`; 0004 modelo de clínica, RLS, función `clinicas_de_usuario` (elimina `_rls_demo`); 0005 política de inserción en `auditoria` para `migrador`; 0006 el operador puede `DELETE` en `sesion` y `SELECT (clinica_id)`; 0007 `migrador` lee `auditoria` (política `migrador_lee`); 0008 `clinica.dek_anterior_wrapped/_version` y políticas de `migrador` para recifrar (`clinica`, `personal`, `paciente`, `evento_agenda`); 0009 tabla `restablecimiento`. **Siguiente: 0010.**
 - **Infra:** `infra/docker-compose.yml` (`db`, `api`; `migrate` y `bootstrap` con perfil `tools`), `infra/db/` (`init-roles.sh`, `roles.sql`), `infra/scripts/gen-local-secrets.sh`. Dockerfile de una etapa sobre `python:3.13-slim`: parche de `zlib1g`, sin `pip`, usuario `app` 10001, sistema de archivos de solo lectura. `frontend/` vacío.
 - **Pruebas de BD en local:** `make check-db` (`infra/scripts/check-db.sh`): contenedor temporal `postgres:16` en `127.0.0.1:55432`, roles, migraciones y `pytest` con `APP_TEST_DB=1`. No sustituye al CI.
 - **CI** (`.github/workflows/ci.yml`; `dependabot.yml` vive en `.github/`, no en `workflows/`): job `backend` (Postgres 16, roles, migraciones, `make check`, `pip-audit` de producción), `secretos` (gitleaks por `docker run`, historial completo), `imagen` (build + Trivy por `docker run aquasec/trivy`, `--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1`; **no se usa `trivy-action`**). Si Trivy falla por la imagen base con parche disponible, se actualiza ese paquete en el Dockerfile. En la Fase 3 se añaden `eslint`, `tsc` y `npm audit`.
@@ -201,7 +180,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 - Todo cambio de BD es una migración Alembic en SQL explícito, con permisos por rol y RLS (y políticas para cada rol que toque la tabla).
 
 ### Tablas (UUID; 🔒 = cifrado `bytea`)
-- **Auth:** `usuario` (email 🔒, email_idx, password_hash, totp_secret 🔒, totp_activo, es_operador, activo, ultimo_login, totp_ultimo_paso), `codigo_recuperacion`, `sesion` (token solo como hash; `clinica_id`, `personal_id`), `invitacion` (email 🔒, email_idx, clinica_id con FK, rol, token_hash, expira_en, usada_en, creada_por; sin RLS), `intento_login`, `llave_plataforma`, `auditoria` (clinica_id con default de contexto, actor_usuario_id, accion, entidad, entidad_id, ip, metadata; con RLS).
+- **Auth:** `usuario` (email 🔒, email_idx, password_hash, totp_secret 🔒, totp_activo, es_operador, activo, ultimo_login, totp_ultimo_paso), `codigo_recuperacion`, `sesion` (token solo como hash; `clinica_id`, `personal_id`), `invitacion` (email 🔒, email_idx, clinica_id con FK, rol, token_hash, expira_en, usada_en, creada_por; sin RLS), `intento_login`, `restablecimiento` (usuario_id, token_hash, creado_en, expira_en, usado_en; sin RLS; `app` sin `DELETE`), `llave_plataforma`, `auditoria` (clinica_id con default de contexto, actor_usuario_id, accion, entidad, entidad_id, ip, metadata; con RLS).
 - **clinica:** nombre, tipo_persona, nombre_legal, rfc 🔒, representante_nombre 🔒, representante_curp 🔒, zona_horaria (IANA, por defecto `America/Mexico_City`), plan (`p5|p10|p20|p50|custom`), estado, vigencia_hasta (date), **notificaciones_whatsapp** (default false), google_maps_url, politica_cancelacion, plantilla_recordatorio (texto del canal manual `wa.me`), horario_laboral (jsonb), dek_wrapped, dek_version, dek_anterior_wrapped y dek_anterior_version (solo durante una rotación; ambos nulos o ambos presentes), creado_en.
 - **personal:** usuario_id, rol, nombre 🔒, contacto_preferido 🔒 (opcional, médicos), activo, creado_en. Único (clínica, usuario); índice único parcial: un admin activo por clínica.
 - **sala:** nombre, activa (se desactivan, no se borran).
@@ -211,7 +190,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 - **notificacion:** destinatario_id, tipo (`sin_confirmar|envio_fallido|cancelada_por_paciente|baja`), evento_id, creada_en, leida_en. Sin datos personales.
 - **aceptacion_legal:** clinica_id, usuario_id, documento (`terminos|aviso`), version (`legal_version`), aceptado_en, ip.
 
-### Falta (migración 0009, inicio de la Fase 2)
+### Falta (migración 0010, inicio de la Fase 2)
 - **baja_whatsapp** (global, **sin `clinica_id` ni RLS por clínica**, solo hash): telefono_idx (clave de plataforma), creada_en, reactivada_en, reactivada_por (personal). Índice único parcial sobre `telefono_idx` donde `reactivada_en` es nulo. Se consulta antes de cada envío; el estado de baja se calcula al leer.
 - **mensaje_whatsapp** (con `clinica_id` y RLS): paciente_id, evento_id (nulo en opt-in), tipo (`optin|recordatorio`), plantilla_version, wa_message_id (único), estado (`enviado|entregado|leido|fallido`), categoria (la reporta Meta), error_codigo (sin datos personales), creado_en, actualizado_en. Único por (evento_id, tipo) en recordatorios. Mide consumo por clínica y mes.
 - **webhook_evento** (sin RLS): clave_unica, recibido_en. **Sin cuerpo ni teléfonos.** Idempotencia del webhook.
@@ -235,6 +214,8 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
   - Usuario nuevo: `POST /api/auth/activar/iniciar` (valida invitación, fija contraseña, crea usuario inactivo, devuelve secreto TOTP; reintentable) → `/confirmar` (`token`, `codigo`, `nombre`, `acepta_terminos`; verifica TOTP, consume la invitación, activa, crea `personal`, registra `aceptacion_legal` si es admin (sin aceptar → 422), crea sesión con contexto y devuelve los 10 códigos una sola vez).
   - Usuario existente: `/iniciar` da el 400 genérico; la persona inicia sesión y usa `POST /api/auth/activar/aceptar` (sesión completa + CSRF; `token`, `nombre`, `acepta_terminos`). Valida que el correo sea el suyo y que no pertenezca ya a esa clínica.
   - El `nombre` lo escribe cada persona al activar; no va en la invitación.
+- **Invitaciones por correo (paso 9):** con proveedor activo, crear (operador o personal) y `POST .../invitaciones/{id}/reenviar` mandan el enlace por correo **antes del commit** (si falla: rollback y 502) y la respuesta lleva `token: null, correo_enviado: true`; con `ninguno`, el token vuelve una sola vez como antes. Reenviar genera token nuevo y otras 72 h (el anterior deja de servir; sirve también si venció; una de médico vencida vuelve a contar para el tope).
+- **Restablecer contraseña (paso 9):** `POST /api/auth/contrasena/olvide {email}` → siempre 202 con el mismo cuerpo; límites 5/15 min por IP (429) y 3/h por cuenta (excedido: 202 sin correo); token de un solo uso, 60 min, pedir otro invalida el anterior; el correo se manda **después de responder** (`BackgroundTasks`). `POST /api/auth/contrasena/restablecer {token, password, codigo?}`: con TOTP activo exige código TOTP o de recuperación; límites 5 fallos por enlace y 10 por IP cada 15 min; cierra todas las sesiones del usuario, desbloquea la cuenta y no inicia sesión. Sin proveedor no se envía nada (no disponible).
 - **Operador:** `/api/operador/*` con el motor `operador`, sesión completa de un `es_operador` (cualquier otro: 404 uniforme), CSRF en mutaciones, todo auditado.
   - `POST /clinicas`: valida zona horaria, genera la DEK, cifra datos legales, crea clínica e **invitación del admin**; devuelve el token **una sola vez**.
   - `GET /clinicas`; `PATCH /clinicas/{id}` (plan, estado, vigencia, `notificaciones_whatsapp`; suspender borra las sesiones de la clínica al instante; los datos se conservan).
@@ -262,7 +243,7 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
   - `GET /{id}/historial`: para la UI; desde `auditoria` (quién, cuándo, campos, paciente anterior/nuevo con nombre descifrado al leer, `fuera_de_horario`, `reprogramado`). La metadata solo guarda ids.
   - Desactivar a un médico con citas futuras no canceladas (sin contar bloqueos) → 409; borrar un paciente con citas futuras → 409.
 - **Cabeceras:** CSP estricta, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`. Frontend sin scripts de terceros, sin analítica, sin datos personales en `localStorage`/`sessionStorage`/URLs.
-- **Secretos como archivos** en `./secrets/` (carpeta 700; archivos 644 solo en desarrollo local, porque el uid 10001 del contenedor debe leerlos; ignorados por git). Nunca en variables de entorno; sin `.env.example`. Existen: `db_password`, `db_migrador_password`, `db_app_password`, `db_operador_password`, `kek_v1`, `resend_api_key`. Fase 2: `meta_access_token`, `meta_app_secret`, `meta_verify_token`.
+- **Secretos como archivos** en `./secrets/` (carpeta 700; archivos 644 solo en desarrollo local, porque el uid 10001 del contenedor debe leerlos; ignorados por git). Nunca en variables de entorno; sin `.env.example`. Los crea `gen-local-secrets.sh`: `db_password`, `db_migrador_password`, `db_app_password`, `db_operador_password`, `kek_v1`. A mano: `resend_api_key` (solo con `APP_CORREO_PROVEEDOR=resend`; en compose está comentado hasta entonces). Las variables no secretas (`APP_KEK_ACTIVE_VERSION`, `APP_CORREO_*`, `APP_URL_PUBLICA`) van en `infra/.env`, ignorado por git. Fase 2: `meta_access_token`, `meta_app_secret`, `meta_verify_token`.
 - **Rotación de llaves (paso 8; procedimiento completo en el `README.md`):**
   - **DEK de clínica:** dos a la vez como máximo (activa + anterior). `rotacion dek` crea v(n+1), espera 10 s de gracia, recifra por lotes y borra la anterior solo cuando no queda nada cifrado con ella (re-ejecutable; reanuda). Programada por cron una vez al año, con `estado --verificar` diario y alerta.
   - **KEK:** manual (anual o ante sospecha): montar `kek_v<N+1>` junto a la anterior, `APP_KEK_ACTIVE_VERSION` en `infra/.env`, `make up`, `rotacion kek`, verificar, retirar la anterior de los contenedores y **archivarla fuera de línea mientras haya respaldos que la necesiten** (6 meses). Invalida CSRF y contadores: los usuarios vuelven a entrar.
@@ -302,13 +283,13 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 
 **Costos y calidad del número:** `mensaje_whatsapp` mide el consumo por clínica y mes. La calidad se revisa a mano en WhatsApp Manager; automatizarla queda para después.
 
-**Correo (Resend):** interfaz `EmailProvider`, implementación por API HTTP. En desarrollo, remitente de pruebas `onboarding@resend.dev` (solo entrega al dueño de la cuenta; destinos `delivered@resend.dev` y `bounced@resend.dev`). Pruebas con cliente simulado. Los correos llevan **solo conteos y un enlace al panel** (prueba de snapshot). También enviará las invitaciones. Dominio propio (SPF, DKIM, DMARC) en el 0.7.
+**Correo (Resend):** interfaz `EmailProvider`, implementación por API HTTP (**hecho en el paso 9**: invitaciones y restablecimiento; falta el correo del resumen diario). En desarrollo, remitente de pruebas `onboarding@resend.dev` (solo entrega al dueño de la cuenta; destinos `delivered@resend.dev` y `bounced@resend.dev`). Pruebas con cliente simulado. Los correos llevan **solo conteos y un enlace al panel** (prueba de snapshot). También enviará las invitaciones. Dominio propio (SPF, DKIM, DMARC) en el 0.7.
 
 ---
 
 ## 10. Plan por fases
 
-### Fase 1: backend núcleo (en curso)
+### Fase 1: backend núcleo (completa con el paso 9)
 1. ✅ Modelos y migraciones (0004, 0005), RLS, función de login.
 2. ✅ Operador, activación que crea `personal` y `aceptacion_legal`, invitaciones a usuarios existentes, contexto de clínica en la sesión (0006).
 3. ✅ RBAC con matriz como datos y `requerir(accion)`.
@@ -326,11 +307,11 @@ La matriz vive **como datos** en `app/auth/rbac.py` (`MATRIZ[accion][rol] → Al
 6. ✅ **Agenda** (crear, mover, cambiar paciente, cancelar; bloqueos; horario con `fuera_de_horario`; historial; prueba de concurrencia) y **configuración de clínica** (`/api/clinica`). Sin migración; acción nueva `VER_CLINICA`.
 7. ✅ **Auditoría transversal:** tabla de cobertura de rutas + escenarios, 403 auditados (`acceso_denegado`), prueba de datos personales en logs y auditoría, 422 sin eco de la entrada, `hide_parameters`, migración 0007, `make auditoria`.
 8. ✅ **Rotación de llaves:** `rotacion kek | dek | estado` (migración 0008), registro de columnas cifradas con prueba contra el esquema, servicio de compose, guía de uso y cron en el `README.md`.
-9. Recuperación de contraseña (sin revelar si la cuenta existe) y envío automático de invitaciones, con `EmailProvider`.
+9. ✅ **Correo y restablecimiento de contraseña:** `EmailProvider` (Resend o ninguno), invitaciones por correo y reenvío, olvidé/restablecer con segundo factor, migración 0009. Proveedor real pendiente de configurar.
 - **Listo cuando:** la matriz RBAC pasa completa; una prueba IDOR entre clínicas falla como debe; una prueba de concurrencia no permite doble reserva; crear o cambiar un paciente sin confirmar el teléfono falla; la BD muestra solo texto cifrado en los campos 🔒.
 
 ### Fase 2: WhatsApp, recordatorios y correo
-0. Migración 0009 (`baja_whatsapp`, `mensaje_whatsapp`, `webhook_evento`, funciones para el webhook).
+0. Migración 0010 (`baja_whatsapp`, `mensaje_whatsapp`, `webhook_evento`, funciones para el webhook).
 1. Interfaces y canales; validar formato con número de prueba de Meta.
 2. Opt-in: envío de `optin_v1`, estados y comprobaciones previas.
 3. Webhook: verificación, firma, idempotencia, estados, botones (validando remitente), baja global, acuses.
@@ -371,6 +352,8 @@ Completar 0.7; prueba real de WhatsApp; revisión de seguridad (OWASP ASVS selec
 | VPS | 2 vCPU / 4 GB, Ubuntu 24.04 LTS |
 | Respaldos | Cloudflare R2 o Backblaze B2 |
 | Librería de calendario | Elegir tras revisar licencias |
+
+**Decididas en el paso 9 (2026-11-23):** `httpx2` pasa a dependencia de producción (Resend y, en la Fase 2, Meta); reenvío de invitaciones para operador y personal; sin buzón local de correos (en local se usa `ninguno` o Resend en modo de pruebas); restablecer exige el segundo factor si la cuenta tiene TOTP; el token de los enlaces va tras `#`.
 
 **Decididas en el paso 8 (2026-11-21):** la rotación de la DEK de plataforma se pospone; las clínicas guardan a lo más dos DEK (activa y anterior) en lugar de una tabla de versiones; la DEK de clínicas se rota por cron una vez al año y la KEK a mano (anual o ante sospecha).
 

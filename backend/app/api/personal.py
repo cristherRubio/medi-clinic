@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authz import Actor, denegar, requerir
 from app.api.deps import PlatformDep, SessionDep, client_ip, get_key_provider
+from app.api.entrega import entregar_invitacion
 from app.auth import audit, membership
 from app.auth.rbac import Accion, Alcance, alcance
 from app.auth.tokens import hash_token, new_token
 from app.config import get_settings
+from app.correo import EmailProvider, get_correo
 from app.crypto.fields import FieldContext
 from app.crypto.keys import KeyProvider
 
@@ -25,6 +27,7 @@ VerPersonal = Annotated[Actor, Depends(requerir(Accion.VER_PERSONAL))]
 AgregarMedicos = Annotated[Actor, Depends(requerir(Accion.AGREGAR_MEDICOS))]
 Borrar = Annotated[Actor, Depends(requerir(Accion.BORRAR))]
 ProviderDep = Annotated[KeyProvider, Depends(get_key_provider)]
+CorreoDep = Annotated[EmailProvider, Depends(get_correo)]
 
 PLAN_LIMITE: dict[str, int | None] = {"p5": 5, "p10": 10, "p20": 20, "p50": 50, "custom": None}
 NO_ENCONTRADO = "No encontrado"
@@ -50,11 +53,19 @@ class InvitarIn(BaseModel):
 
 class InvitacionCreada(BaseModel):
     invitacion_id: UUID
-    token: str  # se muestra una sola vez
+    token: str | None  # solo sin proveedor de correo (entrega a mano); se muestra una vez
+    correo_enviado: bool
     expira_en: datetime
     medicos_usados: int
     limite: int | None
     aviso: bool  # al 80 % del plan o más
+
+
+class InvitacionReenviada(BaseModel):
+    invitacion_id: UUID
+    token: str | None  # solo sin proveedor de correo; el token anterior deja de servir
+    correo_enviado: bool
+    expira_en: datetime
 
 
 class InvitacionPendiente(BaseModel):
@@ -270,9 +281,21 @@ async def reactivar(personal_id: UUID, request: Request, actor: Borrar, db: Sess
     await db.commit()
 
 
+async def _nombre_clinica(db: AsyncSession, cid: UUID) -> str:
+    nombre: str = (
+        await db.execute(text("SELECT nombre FROM clinica WHERE id = :c"), {"c": cid})
+    ).scalar_one()
+    return nombre
+
+
 @router.post("/invitaciones", status_code=201)
 async def invitar(
-    body: InvitarIn, request: Request, actor: AgregarMedicos, db: SessionDep, platform: PlatformDep
+    body: InvitarIn,
+    request: Request,
+    actor: AgregarMedicos,
+    db: SessionDep,
+    platform: PlatformDep,
+    correo: CorreoDep,
 ) -> InvitacionCreada:
     if body.rol == "asistente" and alcance(actor.rol, Accion.AGREGAR_ASISTENTES) is None:
         await denegar(db, request, actor.usuario_id, Accion.AGREGAR_ASISTENTES)
@@ -335,10 +358,14 @@ async def invitar(
         ip=client_ip(request, settings),
         metadata={"rol": body.rol},
     )
+    enviado = await entregar_invitacion(
+        db, correo, email=email, clinica=await _nombre_clinica(db, cid), rol=body.rol, token=token
+    )
     await db.commit()
     return InvitacionCreada(
         invitacion_id=iid,
-        token=token,
+        token=None if enviado else token,
+        correo_enviado=enviado,
         expira_en=expira,
         medicos_usados=nuevos,
         limite=limite,
@@ -409,3 +436,67 @@ async def revocar_invitacion(
         ip=client_ip(request, get_settings()),
     )
     await db.commit()
+
+
+@router.post("/invitaciones/{invitacion_id}/reenviar")
+async def reenviar_invitacion(
+    invitacion_id: UUID,
+    request: Request,
+    actor: AgregarMedicos,
+    db: SessionDep,
+    platform: PlatformDep,
+    correo: CorreoDep,
+) -> InvitacionReenviada:
+    """Token nuevo y otras 72 h (el anterior deja de servir). Sirve también si ya venció."""
+    cid = actor.clinica_id
+    row = (
+        await db.execute(
+            text(
+                "SELECT rol, email, expira_en > now() AS vigente FROM invitacion "
+                "WHERE id = :i AND clinica_id = :c AND usada_en IS NULL"
+            ),
+            {"i": invitacion_id, "c": cid},
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(404, NO_ENCONTRADO)
+    if row.rol == "asistente" and alcance(actor.rol, Accion.AGREGAR_ASISTENTES) is None:
+        await denegar(db, request, actor.usuario_id, Accion.AGREGAR_ASISTENTES)
+    if row.rol == "medico" and not row.vigente:  # vencida: vuelve a contar para el tope
+        limite, usados = await _cupo(db, cid)
+        if limite is not None and usados >= limite:
+            raise HTTPException(409, "Límite de médicos del plan alcanzado")
+    settings = get_settings()
+    token = new_token()
+    expira = (
+        await db.execute(
+            text(
+                "UPDATE invitacion SET token_hash = :h, "
+                "expira_en = now() + make_interval(hours => :hr) "
+                "WHERE id = :i AND clinica_id = :c RETURNING expira_en"
+            ),
+            {"h": hash_token(token), "hr": settings.invitacion_horas, "i": invitacion_id, "c": cid},
+        )
+    ).scalar_one()
+    await audit.registrar(
+        db,
+        accion="invitacion_reenviada",
+        actor_usuario_id=actor.usuario_id,
+        entidad="invitacion",
+        entidad_id=invitacion_id,
+        ip=client_ip(request, settings),
+        metadata={"rol": row.rol},
+    )
+    email = platform.cipher.decrypt(
+        bytes(row.email), platform.ctx("email", invitacion_id, tabla="invitacion")
+    )
+    enviado = await entregar_invitacion(
+        db, correo, email=email, clinica=await _nombre_clinica(db, cid), rol=row.rol, token=token
+    )
+    await db.commit()
+    return InvitacionReenviada(
+        invitacion_id=invitacion_id,
+        token=None if enviado else token,
+        correo_enviado=enviado,
+        expira_en=expira,
+    )

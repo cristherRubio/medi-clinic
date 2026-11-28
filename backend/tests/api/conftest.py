@@ -14,6 +14,7 @@ from app.auth.sessions import cookie_names, csrf_for
 from app.auth.tokens import hash_token, new_token
 from app.auth.totp import new_totp_secret
 from app.config import get_settings
+from app.correo import Correo, CorreoError, EmailProvider, SinCorreo, get_correo
 from app.crypto.envelope import generate_dek, wrap_dek
 from app.crypto.fields import FieldCipher, FieldContext
 from app.crypto.keys import KeyProvider
@@ -62,7 +63,26 @@ def provider() -> KeyProvider:
     return _Provider()
 
 
-def _cliente(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestClient]:
+class MemoriaCorreo(EmailProvider):
+    """Proveedor de correo en memoria: guarda lo enviado o falla a propósito."""
+
+    def __init__(self, falla: bool = False) -> None:
+        self.enviados: list[Correo] = []
+        self.falla = falla
+
+    @property
+    def activo(self) -> bool:
+        return True
+
+    async def enviar(self, correo: Correo) -> None:
+        if self.falla:
+            raise CorreoError("falla simulada")
+        self.enviados.append(correo)
+
+
+def _cliente(
+    platform: PlatformCrypto, provider: KeyProvider, correo: EmailProvider | None = None
+) -> Iterator[TestClient]:
     async def _session() -> AsyncIterator[AsyncSession]:
         engine = make_engine("app")  # uno por petición: evita mezclar bucles de eventos
         try:
@@ -84,6 +104,7 @@ def _cliente(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestCl
     app.dependency_overrides[get_operador_session] = _session_operador
     app.dependency_overrides[get_platform] = lambda: platform
     app.dependency_overrides[get_key_provider] = lambda: provider
+    app.dependency_overrides[get_correo] = lambda: correo or SinCorreo()
     with TestClient(app) as c:
         yield c
 
@@ -91,6 +112,19 @@ def _cliente(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestCl
 @pytest.fixture
 def client(platform: PlatformCrypto, provider: KeyProvider) -> Iterator[TestClient]:
     yield from _cliente(platform, provider)
+
+
+@pytest.fixture
+def correo() -> MemoriaCorreo:
+    return MemoriaCorreo()
+
+
+@pytest.fixture
+def client_correo(
+    platform: PlatformCrypto, provider: KeyProvider, correo: MemoriaCorreo
+) -> Iterator[TestClient]:
+    """Cliente con proveedor de correo en memoria (`correo.enviados`)."""
+    yield from _cliente(platform, provider, correo)
 
 
 @pytest.fixture

@@ -16,7 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 
-Tipo = Literal["login_cuenta", "login_ip", "activar_ip", "activar_token"]
+Tipo = Literal[
+    "login_cuenta",
+    "login_ip",
+    "activar_ip",
+    "activar_token",
+    "olvide_ip",
+    "olvide_cuenta",
+    "restablecer_ip",
+    "restablecer_token",
+]
 
 
 def derive_throttle_key(kek: bytes) -> bytes:
@@ -28,15 +37,9 @@ def clave_hash(key: bytes, tipo: Tipo, valor: str) -> bytes:
 
 
 def limite(tipo: Tipo, settings: Settings | None = None) -> tuple[int, int]:
-    """(máximo de fallos, ventana en minutos)."""
+    """(máximo de fallos, ventana en minutos): `Settings.<tipo>_max` y `<tipo>_ventana_min`."""
     s = settings or get_settings()
-    if tipo == "login_cuenta":
-        return s.login_cuenta_max, s.login_cuenta_ventana_min
-    if tipo == "login_ip":
-        return s.login_ip_max, s.login_ip_ventana_min
-    if tipo == "activar_token":
-        return s.activar_token_max, s.activar_token_ventana_min
-    return s.activar_ip_max, s.activar_ip_ventana_min
+    return int(getattr(s, f"{tipo}_max")), int(getattr(s, f"{tipo}_ventana_min"))
 
 
 async def registrar_fallo(session: AsyncSession, clave: bytes, tipo: Tipo) -> None:

@@ -168,6 +168,7 @@ BYTEA_NO_CIFRADAS: dict[tuple[str, str], str] = {
     ("paciente", "telefono_idx"): "índice ciego (HMAC)",
     ("invitacion", "token_hash"): "hash del token",
     ("sesion", "token_hash"): "hash del token",
+    ("restablecimiento", "token_hash"): "hash del token",
     ("codigo_recuperacion", "codigo_hash"): "hash del código",
     ("intento_login", "clave_hash"): "HMAC de la clave de límite de intentos",
 }

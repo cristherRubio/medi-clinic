@@ -59,7 +59,7 @@ Los roles de la base de datos se crean solo cuando el volumen está vacío. Si r
 
 ### Alta de una clínica y su personal
 
-Mientras no exista el frontend, esto se hace por la API (documentación interactiva en `localhost:8000/docs`, solo en local). Las invitaciones **todavía no se envían por correo**: la API devuelve el token una sola vez y quien invita manda el enlace a mano.
+Mientras no exista el frontend, esto se hace por la API (documentación interactiva en `localhost:8000/docs`, solo en local). Las invitaciones se entregan **por correo si hay proveedor configurado** (ver [Correo](#correo)); si no (`ninguno`, el valor por defecto), la API devuelve el token una sola vez (`correo_enviado: false`) y quien invita manda el enlace a mano.
 
 1. El operador inicia sesión (`/api/auth/login` y `/api/auth/login/totp`) y crea la clínica con `POST /api/operador/clinicas`. La respuesta trae el token de invitación del admin.
 2. El admin activa su cuenta con ese token (`/api/auth/activar/iniciar` y `/confirmar`): fija contraseña, configura TOTP y acepta términos.
@@ -67,7 +67,7 @@ Mientras no exista el frontend, esto se hace por la API (documentación interact
 4. Si alguien ya tiene cuenta en otra clínica, inicia sesión y acepta con `POST /api/auth/activar/aceptar`.
 5. Tras el login, cada persona elige clínica: `GET /api/auth/contextos` y `POST /api/auth/contexto`.
 
-Las invitaciones duran 72 h; el operador puede revocarlas o extenderlas desde `/api/operador/invitaciones/{id}/...`. Suspender una clínica (`PATCH /api/operador/clinicas/{id}` con `estado`) cierra sus sesiones y conserva los datos. Los recordatorios por API de WhatsApp se activan por clínica con `notificaciones_whatsapp` (Fase 2).
+Las invitaciones duran 72 h. `.../invitaciones/{id}/reenviar` (operador y personal) genera un token nuevo, da otras 72 h y vuelve a enviar el correo (el enlace anterior deja de servir); el operador también puede revocarlas o extenderlas desde `/api/operador/invitaciones/{id}/...`. Suspender una clínica (`PATCH /api/operador/clinicas/{id}` con `estado`) cierra sus sesiones y conserva los datos. Los recordatorios por API de WhatsApp se activan por clínica con `notificaciones_whatsapp` (Fase 2).
 
 ## Comandos
 
@@ -110,6 +110,7 @@ Son archivos en `./secrets/`, ignorados por git. Nunca van en variables de entor
 | `db_app_password` | Rol de la API |
 | `db_operador_password` | Rol del operador |
 | `kek_v1` | Llave maestra de cifrado |
+| `resend_api_key` | API key de Resend; solo si `APP_CORREO_PROVEEDOR=resend` (se crea a mano, ver [Correo](#correo)) |
 
 **Si pierdes `kek_vN` pierdes todos los datos cifrados.** Respáldala aparte y fuera de línea. Para cambiarla, sigue [Rotación de llaves](#rotación-de-llaves).
 
@@ -190,9 +191,42 @@ Si algo falla a medias, no se pierde nada: mientras `kek_v1` siga montada, las D
 
 Las opciones se sobrescriben con variables de entorno con prefijo `APP_` (por ejemplo `APP_ENTORNO`, `APP_DB_HOST`, `APP_SECRETS_DIR`). Los valores por defecto sirven en local; la lista completa está en `backend/app/config.py`.
 
-## Correo en desarrollo
+## Correo
 
-Se usa Resend por su API, sin dominio propio: crea una cuenta, guarda la API key en `secrets/resend_api_key` y usa el remitente de pruebas de Resend, que solo entrega al correo del dueño de la cuenta. Las pruebas automáticas usan un cliente simulado.
+El backend envía tres correos, en texto plano y sin datos de pacientes: la invitación del admin de una clínica nueva, las invitaciones de personal (y sus reenvíos) y el enlace para restablecer la contraseña. Los enlaces llevan el token después de `#` (`/activar#t=...`, `/restablecer#t=...`): el navegador no lo manda al servidor, así que no queda en logs.
+
+| Variable (en `infra/.env`) | Por defecto | Qué es |
+|---|---|---|
+| `APP_CORREO_PROVEEDOR` | `ninguno` | `ninguno` (no se envía nada) o `resend` |
+| `APP_CORREO_REMITENTE` | `medi-clinic <onboarding@resend.dev>` | **Provisional.** Remitente de pruebas de Resend |
+| `APP_URL_PUBLICA` | `http://localhost:5173` | **Provisional.** Base de los enlaces (el frontend, Fase 3) |
+
+**Con `ninguno`:** las invitaciones devuelven el token en la respuesta (como antes) y el restablecimiento de contraseña responde igual pero **no envía nada**, así que no está disponible.
+
+### Probarlo sin dominio (Resend en modo de pruebas)
+
+No hace falta dominio: el remitente `onboarding@resend.dev` solo entrega al correo con el que abriste la cuenta de Resend.
+
+1. Crea una cuenta gratuita en Resend y una API key con permiso de envío.
+2. Guárdala: `printf '%s' 're_...' > secrets/resend_api_key && chmod 644 secrets/resend_api_key`.
+3. En `infra/docker-compose.yml` descomenta `- resend_api_key` en el servicio `api` y su entrada en `secrets:`.
+4. Crea `infra/.env` (ignorado por git) con `APP_CORREO_PROVEEDOR=resend` y `make up`.
+5. Invita a alguien **con tu propio correo** (el de la cuenta de Resend): llega la invitación. Los destinos `delivered@resend.dev` y `bounced@resend.dev` sirven para simular entregas y rebotes.
+
+Si el proveedor falla al invitar, no se guarda nada y la API responde 502 (vuelve a intentarlo). Si falla un correo de restablecimiento, se registra un aviso en el log del contenedor (sin destinatario ni enlace) y la persona puede volver a pedirlo.
+
+### Cuando haya dominio (paso 0.7e)
+
+- [ ] Verificar el dominio en Resend y publicar en Cloudflare los registros **SPF**, **DKIM** y **DMARC** que indique.
+- [ ] `APP_CORREO_REMITENTE` con una dirección del dominio (p. ej. `medi-clinic <no-responder@DOMINIO>`).
+- [ ] `APP_URL_PUBLICA=https://DOMINIO` (y que el frontend tenga las rutas `/activar` y `/restablecer`).
+- [ ] Probar los tres correos y revisar que no caigan en spam.
+
+### Restablecer la contraseña
+
+1. `POST /api/auth/contrasena/olvide {email}`: siempre 202, exista o no la cuenta. Máximo 3 correos por cuenta por hora y 5 solicitudes por IP cada 15 min.
+2. La persona abre el enlace (vence en 60 min; pedir otro invalida el anterior).
+3. `POST /api/auth/contrasena/restablecer {token, password, codigo}`: `codigo` es obligatorio si la cuenta tiene TOTP (vale el de la app o uno de recuperación). Cierra todas las sesiones de esa persona; después inicia sesión normalmente.
 
 ## Privacidad
 

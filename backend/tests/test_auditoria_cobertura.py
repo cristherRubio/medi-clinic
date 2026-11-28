@@ -22,6 +22,8 @@ GRUPOS: dict[str, dict[Ruta, str]] = {
         ("POST", "/api/auth/login/recuperacion"): "login_ok",
         ("POST", "/api/auth/logout"): "logout",
         ("POST", "/api/auth/contexto"): "contexto_elegido",
+        ("POST", "/api/auth/contrasena/olvide"): "restablecimiento_solicitado",
+        ("POST", "/api/auth/contrasena/restablecer"): "contrasena_restablecida",
     },
     "activacion": {
         ("POST", "/api/auth/activar/iniciar"): "activacion_iniciada",
@@ -33,6 +35,7 @@ GRUPOS: dict[str, dict[Ruta, str]] = {
         ("PATCH", "/api/operador/clinicas/{clinica_id}"): "clinica_actualizada",
         ("POST", "/api/operador/invitaciones/{invitacion_id}/revocar"): "invitacion_revocada",
         ("POST", "/api/operador/invitaciones/{invitacion_id}/extender"): "invitacion_extendida",
+        ("POST", "/api/operador/invitaciones/{invitacion_id}/reenviar"): "invitacion_reenviada",
     },
     "clinica": {
         ("PATCH", "/api/clinica"): "clinica_configurada",
@@ -43,6 +46,7 @@ GRUPOS: dict[str, dict[Ruta, str]] = {
         ("POST", "/api/personal/{personal_id}/reactivar"): "personal_reactivado",
         ("POST", "/api/personal/invitaciones"): "invitacion_creada",
         ("POST", "/api/personal/invitaciones/{invitacion_id}/revocar"): "invitacion_revocada",
+        ("POST", "/api/personal/invitaciones/{invitacion_id}/reenviar"): "invitacion_reenviada",
         ("POST", "/api/pacientes"): "paciente_creado",
         ("PATCH", "/api/pacientes/{paciente_id}"): "paciente_editado",
         ("DELETE", "/api/pacientes/{paciente_id}"): "paciente_eliminado",

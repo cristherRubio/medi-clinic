@@ -6,6 +6,7 @@ from app.api.activation import router as activation_router
 from app.api.agenda import router as agenda_router
 from app.api.auth import router as auth_router
 from app.api.clinica import router as clinica_router
+from app.api.contrasena import router as contrasena_router
 from app.api.operator import router as operator_router
 from app.api.pacientes import router as pacientes_router
 from app.api.personal import router as personal_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(agenda_router)
     app.include_router(auth_router)
     app.include_router(clinica_router)
+    app.include_router(contrasena_router)
     app.include_router(operator_router)
     app.include_router(pacientes_router)
     app.include_router(personal_router)

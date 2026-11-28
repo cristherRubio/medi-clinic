@@ -3,6 +3,7 @@ los 403 quedan registrados y ni la auditoría ni los logs llevan datos personale
 
 import logging
 import os
+import re
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -21,6 +22,7 @@ from test_auditoria_cobertura import GRUPOS, Ruta
 
 from .conftest import (
     PASSWORD,
+    MemoriaCorreo,
     como,
     crear_equipo,
     crear_invitacion_completa,
@@ -113,7 +115,12 @@ async def _entrar_operador(c: TestClient, engine: AsyncEngine, platform: Platfor
 
 
 async def test_auditoria_auth(
-    client: TestClient, engine: AsyncEngine, platform: PlatformCrypto, provider: KeyProvider
+    client: TestClient,
+    client_correo: TestClient,
+    correo: MemoriaCorreo,
+    engine: AsyncEngine,
+    platform: PlatformCrypto,
+    provider: KeyProvider,
 ) -> None:
     cob = Cobertura("auth")
     cid, (admin,) = await crear_equipo(engine, platform, provider, "admin")
@@ -169,6 +176,23 @@ async def test_auditoria_auth(
     assert r.status_code == 200
     meta = await cob.ver("POST", "/api/auth/login/recuperacion", actor=rc.id)
     assert meta == {"metodo": "recuperacion"}
+
+    # Restablecimiento de contraseña (con correo en memoria).
+    u = await crear_usuario(engine, platform)
+    assert (
+        client_correo.post("/api/auth/contrasena/olvide", json={"email": u.email}).status_code
+        == 202
+    )
+    await cob.ver("POST", "/api/auth/contrasena/olvide", actor=u.id, entidad_id=u.id)
+    m = re.search(r"#t=(\S+)", correo.enviados[0].texto)
+    assert m is not None
+    r = client_correo.post(
+        "/api/auth/contrasena/restablecer",
+        json={"token": m.group(1), "password": "otra-clave-nueva-larga"},
+    )
+    assert r.status_code == 204
+    meta = await cob.ver("POST", "/api/auth/contrasena/restablecer", actor=u.id, entidad_id=u.id)
+    assert meta == {"segundo_factor": False}
     cob.completa()
 
 
@@ -257,6 +281,15 @@ async def test_auditoria_operador(
         entidad_id=iid,
         clinica_id=cid,
     )
+    r = client.post(f"/api/operador/invitaciones/{iid}/reenviar", headers=h)
+    assert r.status_code == 200
+    await cob.ver(
+        "POST",
+        "/api/operador/invitaciones/{invitacion_id}/reenviar",
+        actor=op,
+        entidad_id=iid,
+        clinica_id=cid,
+    )
     assert client.post(f"/api/operador/invitaciones/{iid}/revocar", headers=h).status_code == 204
     await cob.ver(
         "POST",
@@ -306,6 +339,8 @@ async def test_auditoria_recursos_de_clinica(
         )
     )["invitacion_id"]
     assert await ver("POST", "/api/personal/invitaciones", inv) == {"rol": "medico"}
+    ok(client.post(f"/api/personal/invitaciones/{inv}/reenviar", headers=h))
+    await ver("POST", "/api/personal/invitaciones/{invitacion_id}/reenviar", inv)
     ok(client.post(f"/api/personal/invitaciones/{inv}/revocar", headers=h))
     await ver("POST", "/api/personal/invitaciones/{invitacion_id}/revocar", inv)
 
